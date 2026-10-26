@@ -1,10 +1,10 @@
 # PreZero To-Do
 
-A To-Do application built with Go and PostgreSQL. The API reads tasks from PostgreSQL. Task mutations and the Nuxt frontend are not implemented yet.
+A To-Do application built with Go and PostgreSQL. The API reads tasks from PostgreSQL. Task creation is implemented; updates, deletion and the Nuxt frontend remain pending.
 
 ## Current status
 
-- Go HTTP API with health and database-backed task-list endpoints.
+- Go HTTP API with health, task-list and task-creation endpoints.
 - PostgreSQL 17 running through Docker Compose with a persistent volume.
 - Task schema verified manually, including inserts, defaults and nonblank title validation.
 - pgx v5.11.0 registered through `database/sql`; startup verifies database connectivity with a five-second timeout.
@@ -98,6 +98,7 @@ For an existing setup, keep the actual working connection string in your ignored
 | --- | --- | --- |
 | `GET` | `/healthz` | Returns `{"status":"ok"}`; does not check the database. |
 | `GET` | `/api/tasks` | Returns database tasks ordered by ID; returns `[]` when empty. |
+| `POST` | `/api/tasks` | Creates a task from a title; returns `201 Created`. |
 | `GET` | `/wehan` | Learning endpoint returning a fixed status object. |
 
 ```bash
@@ -118,6 +119,30 @@ go -C backend vet ./...
 ```
 
 `gofmt -l` should print no filenames. There are currently no automated test files; `go test` verifies package compilation, while `go vet` performs static checks.
+
+### Task creation smoke checks
+
+Restart the API after saving code changes. Create a task:
+
+```bash
+curl -i -X POST http://localhost:8080/api/tasks \
+  -H 'Content-Type: application/json' \
+  -d '{"title":"Build create-task endpoint"}'
+curl -i http://localhost:8080/api/tasks
+docker compose exec db psql -U wehan -d wehan -c "SELECT id, title, completed FROM tasks ORDER BY id;"
+```
+
+Expect `201 Created` with the generated `id`, trimmed `title` and `completed: false`. Confirm the same task appears in the list and database. Each POST adds a row.
+
+The following requests must return `400 Bad Request` without inserting tasks:
+
+```bash
+curl -i -X POST http://localhost:8080/api/tasks -d '{"title":"   "}'
+curl -i -X POST http://localhost:8080/api/tasks -d '{"title":"Task","extra":true}'
+curl -i -X POST http://localhost:8080/api/tasks -d '{"title":"Task"} {"title":"Other"}'
+```
+
+The endpoint accepts one JSON object containing only `title`, trims surrounding whitespace, and requires 1–200 Unicode code points. Request bodies are limited to 1 MiB; invalid or oversized bodies currently return `400`. Database failures return `500`. The five-second database deadline covers the insert and returned row, not the entire HTTP request.
 
 ### Database smoke checks
 
@@ -140,7 +165,7 @@ docker compose exec db psql -U wehan -d wehan -c "SELECT COUNT(*) FROM tasks;"
 
 The insert is expected to fail with `violates check constraint`; the row count should remain unchanged. Rejected inserts can consume identity values, so gaps in IDs are normal.
 
-Manual verification on 2026-10-26 confirmed the schema, valid inserts and SQL reads, rejection of a space-only title without increasing the row count, and successful Go database connection and HTTP server startup. Database-backed task retrieval compiles successfully; end-to-end HTTP verification remains pending.
+Manual verification on 2026-10-26 confirmed the schema, valid inserts and SQL reads, rejection of a space-only title without increasing the row count, and successful Go database connection and HTTP server startup. The task-list HTTP response was verified against database rows. Task creation requires the HTTP smoke checks below before acceptance.
 
 ## Project layout
 
@@ -193,7 +218,7 @@ Adding `-v` to `docker compose down` deletes the database volume and its data.
 
 ## Next milestone
 
-Restart the API and compare `/api/tasks` with `SELECT id, title, completed FROM tasks ORDER BY id;`. Confirm matching records and an HTTP `200` response before proceeding to task creation. Updates, deletion and the Nuxt frontend remain pending.
+Verify task creation with the smoke checks above, then implement task updates. Deletion and the Nuxt frontend remain pending.
 
 ## References
 

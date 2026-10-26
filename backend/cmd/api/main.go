@@ -5,9 +5,11 @@ import (
 	"context"
 	"database/sql"
 	"encoding/json"
+	"io"
 	"log"
 	"net/http"
 	"os"
+	"strings"
 	"time"
 
 	// The blank import registers pgx; DSN values configure a connection, not the driver.
@@ -51,6 +53,7 @@ func main() {
 	mux.HandleFunc("GET /wehan", wehanHandler)
 	// Binding the method carries app (and app.db) while keeping the HTTP handler signature.
 	mux.HandleFunc("GET /api/tasks", app.listTasksHandler)
+	mux.HandleFunc("POST /api/tasks", app.createTaskHandler)
 
 	// & creates a pointer to this server struct; configuring it does not start listening.
 	server := &http.Server{
@@ -137,5 +140,72 @@ func (app *application) listTasksHandler(w http.ResponseWriter, r *http.Request)
 
 	if err := json.NewEncoder(w).Encode(tasks); err != nil {
 		log.Printf("write tasks response: %v", err)
+	}
+}
+
+func (app *application) createTaskHandler(w http.ResponseWriter, r *http.Request) {
+	// Only the title is accepted when creating a task.
+	var input struct {
+		Title string `json:"title"`
+	}
+
+	// Limit the request body to 1 MiB.
+	r.Body = http.MaxBytesReader(w, r.Body, 1<<20)
+	defer r.Body.Close()
+
+	decoder := json.NewDecoder(r.Body)
+	decoder.DisallowUnknownFields()
+
+	decodeErr := decoder.Decode(&input)
+	if decodeErr != nil {
+		http.Error(w, "Invalid request body", http.StatusBadRequest)
+		return
+	}
+
+	// Accept exactly one JSON value.
+	var extra any
+	extraErr := decoder.Decode(&extra)
+	if extraErr != io.EOF {
+		http.Error(w, "Request body must contain one JSON object", http.StatusBadRequest)
+		return
+	}
+
+	title := strings.TrimSpace(input.Title)
+	titleLength := len([]rune(title))
+
+	if titleLength == 0 || titleLength > 200 {
+		http.Error(w, "Title must contain 1 to 200 characters", http.StatusBadRequest)
+		return
+	}
+
+	// Database work follows the request cancellation and a five-second timeout.
+	requestContext := r.Context()
+	timeout := 5 * time.Second
+	ctx, cancel := context.WithTimeout(requestContext, timeout)
+	defer cancel()
+
+	var task Task
+
+	// Insert and return the new task.
+	row := app.db.QueryRowContext(
+		ctx,
+		"INSERT INTO tasks (title) VALUES ($1) RETURNING id, title, completed",
+		title,
+	)
+
+	scanErr := row.Scan(&task.Id, &task.Title, &task.Completed)
+	if scanErr != nil {
+		log.Printf("create task: %v", scanErr)
+		http.Error(w, "Unable to create task", http.StatusInternalServerError)
+		return
+	}
+
+	w.Header().Set("Content-Type", "application/json")
+	w.WriteHeader(http.StatusCreated)
+
+	encoder := json.NewEncoder(w)
+	encodeErr := encoder.Encode(task)
+	if encodeErr != nil {
+		log.Printf("write created task response: %v", encodeErr)
 	}
 }
