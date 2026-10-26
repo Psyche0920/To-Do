@@ -2,6 +2,7 @@
 package main
 
 import (
+	"context"
 	"database/sql"
 	"encoding/json"
 	"log"
@@ -94,14 +95,45 @@ func wehanHandler(w http.ResponseWriter, r *http.Request) {
 
 // The receiver is like Python self: app points to the struct; app.db points to the pool.
 func (app *application) listTasksHandler(w http.ResponseWriter, r *http.Request) {
+	// Limit the query to five seconds; inherit request cancellation.
+	ctx, cancel := context.WithTimeout(r.Context(), 5*time.Second)
+	defer cancel()
+
+	rows, err := app.db.QueryContext(
+		ctx,
+		"SELECT id, title, completed FROM tasks ORDER BY id",
+	)
+
+	if err != nil {
+		log.Printf("query tasks: %v", err)
+		http.Error(w, "Unable to retrieve tasks", http.StatusInternalServerError)
+		return
+	}
+	defer rows.Close()
+
+	// Return [] instead of null when the table is empty.
+	tasks := make([]Task, 0)
+
+	for rows.Next() {
+		var task Task
+		// Read columns into fields in the same order as SELECT.
+		if err := rows.Scan(&task.Id, &task.Title, &task.Completed); err != nil {
+			log.Printf("scan task : %v", err)
+			http.Error(w, "Unable to retrieve tasks", http.StatusInternalServerError)
+			return
+		}
+
+		tasks = append(tasks, task)
+	}
+
+	if err := rows.Err(); err != nil {
+		log.Printf("read tasks: %v", err)
+		http.Error(w, "Unable to retrieve tasks", http.StatusInternalServerError)
+		return
+	}
+
 	w.Header().Set("Content-Type", "application/json")
 	w.WriteHeader(http.StatusOK)
-
-	// []Task is a slice; these are sample values, not rows queried through app.db yet.
-	tasks := []Task{
-		{Title: "hackthon", Completed: true},
-		{Title: "sleep", Completed: false},
-	}
 
 	if err := json.NewEncoder(w).Encode(tasks); err != nil {
 		log.Printf("write tasks response: %v", err)

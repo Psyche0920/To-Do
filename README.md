@@ -1,14 +1,14 @@
 # PreZero To-Do
 
-A To-Do application built with Go and PostgreSQL. The current API serves static sample tasks; database-backed endpoints and the Nuxt frontend are not implemented yet.
+A To-Do application built with Go and PostgreSQL. The API reads tasks from PostgreSQL. Task mutations and the Nuxt frontend are not implemented yet.
 
 ## Current status
 
-- Go HTTP API with health and sample task endpoints.
+- Go HTTP API with health and database-backed task-list endpoints.
 - PostgreSQL 17 running through Docker Compose with a persistent volume.
 - Task schema verified manually, including inserts, defaults and nonblank title validation.
 - pgx v5.11.0 registered through `database/sql`; startup verifies database connectivity with a five-second timeout.
-- The `application` struct shares the connection pool with the task handler through a method receiver; task queries are not implemented yet.
+- The `application` struct shares the connection pool with the task handler through a method receiver. Task queries use a five-second timeout and inherit request cancellation.
 
 ## Requirements
 
@@ -97,7 +97,7 @@ For an existing setup, keep the actual working connection string in your ignored
 | Method | Path | Current behavior |
 | --- | --- | --- |
 | `GET` | `/healthz` | Returns `{"status":"ok"}`; does not check the database. |
-| `GET` | `/api/tasks` | Returns a static JSON task list. |
+| `GET` | `/api/tasks` | Returns database tasks ordered by ID; returns `[]` when empty. |
 | `GET` | `/wehan` | Learning endpoint returning a fixed status object. |
 
 ```bash
@@ -105,13 +105,7 @@ curl -i http://localhost:8080/healthz
 curl -i http://localhost:8080/api/tasks
 ```
 
-Both return `200 OK`. The current task response is:
-
-```json
-[{"id":0,"title":"hackthon","completed":true},{"id":0,"title":"sleep","completed":false}]
-```
-
-Database rows do not affect this response yet. The sample tasks have zero-valued IDs because they are not populated from database rows.
+Successful requests return `200 OK`. The task response is a JSON array with `id`, `title` and `completed` fields. Its contents depend on database rows. Query or result-reading failures return `500 Internal Server Error` and are logged by the API.
 
 ## Verification
 
@@ -146,7 +140,7 @@ docker compose exec db psql -U wehan -d wehan -c "SELECT COUNT(*) FROM tasks;"
 
 The insert is expected to fail with `violates check constraint`; the row count should remain unchanged. Rejected inserts can consume identity values, so gaps in IDs are normal.
 
-Manual verification on 2026-10-26 confirmed the schema, valid inserts and SQL reads, rejection of a space-only title without increasing the row count, and successful Go database connection and HTTP server startup. Task retrieval still uses static data, so database-backed task API behavior has not been verified.
+Manual verification on 2026-10-26 confirmed the schema, valid inserts and SQL reads, rejection of a space-only title without increasing the row count, and successful Go database connection and HTTP server startup. Database-backed task retrieval compiles successfully; end-to-end HTTP verification remains pending.
 
 ## Project layout
 
@@ -199,7 +193,7 @@ Adding `-v` to `docker compose down` deletes the database volume and its data.
 
 ## Next milestone
 
-Use `app.db.QueryContext` to read task rows, scan them into `Task` values, and replace the static response. Verify that `/api/tasks` returns the same records as the SQL query. Task creation, updates, deletion and the Nuxt frontend remain pending.
+Restart the API and compare `/api/tasks` with `SELECT id, title, completed FROM tasks ORDER BY id;`. Confirm matching records and an HTTP `200` response before proceeding to task creation. Updates, deletion and the Nuxt frontend remain pending.
 
 ## References
 
