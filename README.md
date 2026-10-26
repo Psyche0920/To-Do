@@ -8,6 +8,7 @@ A To-Do application built with Go and PostgreSQL. The current API serves static 
 - PostgreSQL 17 running through Docker Compose with a persistent volume.
 - Task schema verified manually, including inserts, defaults and nonblank title validation.
 - pgx v5.11.0 registered through `database/sql`; startup verifies database connectivity with a five-second timeout.
+- The `application` struct shares the connection pool with the task handler through a method receiver; task queries are not implemented yet.
 
 ## Requirements
 
@@ -107,10 +108,10 @@ curl -i http://localhost:8080/api/tasks
 Both return `200 OK`. The current task response is:
 
 ```json
-[{"title":"hackthon","completed":true},{"title":"sleep","completed":false}]
+[{"id":0,"title":"hackthon","completed":true},{"id":0,"title":"sleep","completed":false}]
 ```
 
-Database rows do not affect this response yet.
+Database rows do not affect this response yet. The sample tasks have zero-valued IDs because they are not populated from database rows.
 
 ## Verification
 
@@ -145,7 +146,7 @@ docker compose exec db psql -U wehan -d wehan -c "SELECT COUNT(*) FROM tasks;"
 
 The insert is expected to fail with `violates check constraint`; the row count should remain unchanged. Rejected inserts can consume identity values, so gaps in IDs are normal.
 
-Manual verification on 2026-10-26 confirmed the schema, a valid insert with default values, rejection of a space-only title without increasing the row count, and successful Go database connection and HTTP server startup. Task retrieval still uses static data, so database-backed task API behavior has not been verified.
+Manual verification on 2026-10-26 confirmed the schema, valid inserts and SQL reads, rejection of a space-only title without increasing the row count, and successful Go database connection and HTTP server startup. Task retrieval still uses static data, so database-backed task API behavior has not been verified.
 
 ## Project layout
 
@@ -198,7 +199,7 @@ Adding `-v` to `docker compose down` deletes the database volume and its data.
 
 ## Next milestone
 
-Replace the static task list with a query using the verified database connection pool. Task creation, updates, deletion and the Nuxt frontend remain pending.
+Use `app.db.QueryContext` to read task rows, scan them into `Task` values, and replace the static response. Verify that `/api/tasks` returns the same records as the SQL query. Task creation, updates, deletion and the Nuxt frontend remain pending.
 
 ## References
 
