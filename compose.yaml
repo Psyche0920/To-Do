@@ -12,6 +12,3 @@ services:
 
 volumes:
   pgdata:
-
-#"定义：有volumes叫pgdata"
-#这个叫pgdata的volumes被挂载到了这个路径，这个路径就可以使用volumes里的data
