@@ -5,10 +5,12 @@ import (
 	"context"
 	"database/sql"
 	"encoding/json"
+	"errors"
 	"io"
 	"log"
 	"net/http"
 	"os"
+	"strconv"
 	"strings"
 	"time"
 
@@ -54,6 +56,7 @@ func main() {
 	// Binding the method carries app (and app.db) while keeping the HTTP handler signature.
 	mux.HandleFunc("GET /api/tasks", app.listTasksHandler)
 	mux.HandleFunc("POST /api/tasks", app.createTaskHandler)
+	mux.HandleFunc("PATCH /api/tasks/{id}", app.updateTaskHandler)
 
 	// & creates a pointer to this server struct; configuring it does not start listening.
 	server := &http.Server{
@@ -207,5 +210,80 @@ func (app *application) createTaskHandler(w http.ResponseWriter, r *http.Request
 	encodeErr := encoder.Encode(task)
 	if encodeErr != nil {
 		log.Printf("write created task response: %v", encodeErr)
+	}
+}
+
+func (app *application) updateTaskHandler(w http.ResponseWriter, r *http.Request) {
+	idText := r.PathValue("id")
+	id, idErr := strconv.ParseInt(idText, 10, 64)
+	if idErr != nil || id <= 0 {
+		http.Error(w, "Invalid task ID", http.StatusBadRequest)
+		return
+	}
+
+	// A pointer distinguishes missing completed from explicit false.
+	var input struct {
+		Completed *bool `json:"completed"`
+	}
+
+	r.Body = http.MaxBytesReader(w, r.Body, 1<<20)
+	defer r.Body.Close()
+
+	decoder := json.NewDecoder(r.Body)
+	decoder.DisallowUnknownFields()
+
+	decodeErr := decoder.Decode(&input)
+	if decodeErr != nil {
+		http.Error(w, "Invalid request body", http.StatusBadRequest)
+		return
+	}
+
+	var extra any
+	extraErr := decoder.Decode(&extra)
+	if extraErr != io.EOF {
+		http.Error(w, "Request body must contain one JSON object", http.StatusBadRequest)
+		return
+	}
+
+	if input.Completed == nil {
+		http.Error(w, "Completed must be true or false", http.StatusBadRequest)
+		return
+	}
+
+	// Limit the database update and returned row to five seconds.
+	requestContext := r.Context()
+	timeout := 5 * time.Second
+	ctx, cancel := context.WithTimeout(requestContext, timeout)
+	defer cancel()
+
+	var task Task
+
+	// Update and return the task.
+	row := app.db.QueryRowContext(
+		ctx,
+		"UPDATE tasks SET completed = $1 WHERE id = $2 RETURNING id, title, completed",
+		*input.Completed,
+		id,
+	)
+
+	scanErr := row.Scan(&task.Id, &task.Title, &task.Completed)
+	taskNotFound := errors.Is(scanErr, sql.ErrNoRows)
+	if taskNotFound {
+		http.Error(w, "Task not found", http.StatusNotFound)
+		return
+	}
+	if scanErr != nil {
+		log.Printf("update task: %v", scanErr)
+		http.Error(w, "Unable to update task", http.StatusInternalServerError)
+		return
+	}
+
+	w.Header().Set("Content-Type", "application/json")
+	w.WriteHeader(http.StatusOK)
+
+	encoder := json.NewEncoder(w)
+	encodeErr := encoder.Encode(task)
+	if encodeErr != nil {
+		log.Printf("write updated task response: %v", encodeErr)
 	}
 }

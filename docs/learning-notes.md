@@ -40,3 +40,15 @@
 - `fmt.Errorf` creates an error; it does not print or save it. `%w` preserves a wrapped error; `%v` formats a value for display.
 - Successful database setup returns `db, nil`; failure returns `nil, err`. Both return positions are always present.
 - `log.Printf` writes to the API process's logs. HTTP errors must be written separately for the client.
+
+## Updating tasks and command syntax
+
+- The route `/api/tasks/{id}` names a path position. `r.PathValue("id")` reads it as text; it does not add anything to the URL.
+- `strconv.ParseInt(idText, 10, 64)` reads decimal text as a signed 64-bit integer, matching PostgreSQL `BIGINT` and the task ID type. Conversion errors and nonpositive IDs are rejected.
+- `$1` and `$2` are argument positions, not task IDs: the first argument is the new completion state; the second is the target task ID.
+- The target ID comes from the URL. The new completion state comes from the JSON body. `SET` chooses the field to change; `RETURNING` chooses fields to read back.
+- `*bool` distinguishes an omitted or null field from explicit `false`. This endpoint accepts only `completed` because its input struct and UPDATE statement define that contract.
+- A handler's `w` and `r` are both input parameters. `w` is a supplied response-writing interface, not a JSON return type.
+- List reads existing tasks; create inserts a task; update changes an existing task. A future frontend can fetch the list on page load and again after successful mutations.
+- `go -C backend` runs Go from the backend directory without changing the shell directory. Files in one main package compile together; execution starts at its single `main` function.
+- curl `-H` sets a request header; `-d` supplies the request body. HTTP examples are not shell commands; use curl to send them.

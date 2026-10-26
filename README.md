@@ -1,6 +1,6 @@
 # PreZero To-Do
 
-A To-Do application built with Go and PostgreSQL. The API reads tasks from PostgreSQL. Task creation is implemented; updates, deletion and the Nuxt frontend remain pending.
+A To-Do application built with Go and PostgreSQL. The API reads tasks from PostgreSQL. Task creation is implemented; completion updates are implemented; deletion and the Nuxt frontend remain pending.
 
 ## Current status
 
@@ -99,6 +99,7 @@ For an existing setup, keep the actual working connection string in your ignored
 | `GET` | `/healthz` | Returns `{"status":"ok"}`; does not check the database. |
 | `GET` | `/api/tasks` | Returns database tasks ordered by ID; returns `[]` when empty. |
 | `POST` | `/api/tasks` | Creates a task from a title; returns `201 Created`. |
+| `PATCH` | `/api/tasks/{id}` | Updates completion; returns the updated task, or `404` if absent. |
 | `GET` | `/wehan` | Learning endpoint returning a fixed status object. |
 
 ```bash
@@ -144,6 +145,19 @@ curl -i -X POST http://localhost:8080/api/tasks -d '{"title":"Task"} {"title":"O
 
 The endpoint accepts one JSON object containing only `title`, trims surrounding whitespace, and requires 1–200 Unicode code points. Request bodies are limited to 1 MiB; invalid or oversized bodies currently return `400`. Database failures return `500`. The five-second database deadline covers the insert and returned row, not the entire HTTP request.
 
+### Task update smoke checks
+
+Restart the API, then use an existing task ID:
+
+```bash
+curl -i -X PATCH http://localhost:8080/api/tasks/4 \
+  -H 'Content-Type: application/json' \
+  -d '{"completed":true}'
+curl -i http://localhost:8080/api/tasks
+```
+
+Expect `200 OK` and the updated task. Confirm the list retains the new completion state. Sending `false` marks it incomplete again. Missing or null `completed`, unknown fields and invalid IDs return `400`; a valid but absent ID returns `404`.
+
 ### Database smoke checks
 
 Insert and read a sample task. Each execution of the insert adds a row:
@@ -165,7 +179,7 @@ docker compose exec db psql -U wehan -d wehan -c "SELECT COUNT(*) FROM tasks;"
 
 The insert is expected to fail with `violates check constraint`; the row count should remain unchanged. Rejected inserts can consume identity values, so gaps in IDs are normal.
 
-Manual verification on 2026-10-26 confirmed the schema, valid inserts and SQL reads, rejection of a space-only title without increasing the row count, and successful Go database connection and HTTP server startup. The task-list HTTP response was verified against database rows. Task creation requires the HTTP smoke checks below before acceptance.
+Manual verification on 2026-10-26 confirmed the schema, valid inserts and SQL reads, rejection of a space-only title without increasing the row count, and successful Go database connection and HTTP server startup. The task-list HTTP response was verified against database rows. Task creation and completion updates were manually verified by the developer, including blank-title rejection and persistence visible through the list endpoint.
 
 ## Project layout
 
@@ -218,7 +232,7 @@ Adding `-v` to `docker compose down` deletes the database volume and its data.
 
 ## Next milestone
 
-Verify task creation with the smoke checks above, then implement task updates. Deletion and the Nuxt frontend remain pending.
+Implement task deletion, then build the Nuxt frontend. Ten of eighteen learning milestones are complete (approximately 56%); this measures milestone count, not remaining effort.
 
 ## Learning notes
 
