@@ -220,6 +220,10 @@ Adding `-v` to `docker compose down` deletes the database volume and its data.
 
 Verify task creation with the smoke checks above, then implement task updates. Deletion and the Nuxt frontend remain pending.
 
+## Learning notes
+
+See [Backend Learning Notes](docs/learning-notes.md) for concise explanations of the core Go and database concepts.
+
 ## References
 
 - [PostgreSQL Docker image and Compose example](https://github.com/docker-library/docs/blob/master/postgres/README.md)
