@@ -4,6 +4,7 @@ import (
 	"encoding/json"
 	"log"
 	"net/http"
+	"os"
 	"time"
 
 	_ "github.com/jackc/pgx/v5/stdlib"
@@ -15,6 +16,17 @@ type Task struct {
 }
 
 func main() {
+	dsn := os.Getenv("DATABASE_URL")
+	if dsn == "" {
+		log.Fatal("DATABASE_URL is required")
+	}
+	db, err := openDatabase(dsn)
+	if err != nil {
+		log.Fatal(err)
+	}
+	defer db.Close()
+	log.Println("Database connection established")
+
 	mux := http.NewServeMux()
 	mux.HandleFunc("GET /healthz", healthHandler)
 	mux.HandleFunc("GET /wehan", wehanHandler)

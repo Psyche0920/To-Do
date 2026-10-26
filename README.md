@@ -7,7 +7,7 @@ A To-Do application built with Go and PostgreSQL. The current API serves static 
 - Go HTTP API with health and sample task endpoints.
 - PostgreSQL 17 running through Docker Compose with a persistent volume.
 - Task schema verified manually, including inserts, defaults and nonblank title validation.
-- pgx v5.11.0 installed and registered; the API does not open a database connection yet.
+- pgx v5.11.0 registered through `database/sql`; startup verifies database connectivity with a five-second timeout.
 
 ## Requirements
 
@@ -21,7 +21,7 @@ Run the following commands from the repository root unless stated otherwise.
 
 ### 1. Configure the database
 
-On first setup, copy the environment template and set a local password:
+On first setup, copy the environment template, set a local password and update the password in `DATABASE_URL` to match:
 
 ```bash
 cp .env.example .env
@@ -34,8 +34,9 @@ Do not overwrite an existing `.env`. The file is ignored by Git.
 | `POSTGRES_USER` | Initial database user | `wehan` |
 | `POSTGRES_PASSWORD` | Initial database password | Set locally |
 | `POSTGRES_DB` | Initial database name | `wehan` |
+| `DATABASE_URL` | Go API connection string | `postgres://wehan:<password>@localhost:5432/wehan?sslmode=disable` |
 
-The commands below use `wehan` as both the user and database name. Adjust `-U` and `-d` if your configuration differs. These variables initialize a new data volume; changing `.env` does not change an existing database's credentials.
+The commands below use `wehan` as both the user and database name. Adjust `-U` and `-d` if your configuration differs. The `POSTGRES_*` variables initialize a new data volume; changing `.env` does not change an existing database's credentials. `DATABASE_URL` must use the database's actual credentials. Quote the URL in `.env` as shown in `.env.example`; URL-encode reserved characters in its password component. `sslmode=disable` is intended for this local development connection.
 
 ### 2. Start PostgreSQL
 
@@ -78,10 +79,17 @@ In a separate terminal, from the repository root:
 
 ```bash
 go -C backend mod download
+set -a
+source .env
+set +a
 go -C backend run ./cmd/api
 ```
 
-The API listens on port `8080`. Restart the process after changing Go code. The root `.env` is used by Compose; it is not automatically loaded by the Go process.
+Compose loads `.env` automatically; the Go process does not. The shell commands above export the variables from your local configuration before starting Go. Run them from the same terminal, using a `.env` file you control.
+
+A successful database check logs `Database connection established`. The API then starts listening on port `8080`; confirm HTTP readiness with the requests below. If the connection string is missing or the database check fails, startup exits with an error. Restart the process after changing Go code.
+
+For an existing setup, keep the actual working connection string in your ignored `.env`. A temporary terminal assignment is not saved to that file; sourcing an outdated `.env` will overwrite the terminal value.
 
 ## API
 
@@ -137,7 +145,7 @@ docker compose exec db psql -U wehan -d wehan -c "SELECT COUNT(*) FROM tasks;"
 
 The insert is expected to fail with `violates check constraint`; the row count should remain unchanged. Rejected inserts can consume identity values, so gaps in IDs are normal.
 
-Manual verification on 2026-10-26 confirmed the schema, a valid insert with default values, and rejection of a space-only title without increasing the row count. This does not constitute an end-to-end API/database test.
+Manual verification on 2026-10-26 confirmed the schema, a valid insert with default values, rejection of a space-only title without increasing the row count, and successful Go database connection and HTTP server startup. Task retrieval still uses static data, so database-backed task API behavior has not been verified.
 
 ## Project layout
 
@@ -152,6 +160,7 @@ Manual verification on 2026-10-26 confirmed the schema, a valid insert with defa
     ├── go.sum
     ├── schema.sql
     └── cmd/api/
+        ├── database.go
         └── main.go
 ```
 
@@ -182,12 +191,14 @@ Adding `-v` to `docker compose down` deletes the database volume and its data.
 | `role "todo" does not exist` | Use the configured database user; this repository's examples use `-U wehan -d wehan`. |
 | `relation "tasks" already exists` | Inspect the table with `\d tasks`; do not rerun the initial schema against an existing table. |
 | `cannot find main module` | Use `go -C backend ...` from the repository root. |
+| `DATABASE_URL is required` | Check the exact variable name, set it in `.env`, and export the file's variables in the terminal used to start Go. |
+| `password authentication failed` | Replace any placeholder password in `DATABASE_URL` with the actual database password, encode reserved URL characters, and reload the environment. |
 | HTTP `404` or `405` after editing routes | Verify the path and uppercase HTTP method, then restart the Go process. |
 | Port already in use | Stop the previous process or select an unused host port. |
 
 ## Next milestone
 
-Connect the Go API to PostgreSQL and replace the static task list with a database query. Task creation, updates, deletion and the Nuxt frontend remain pending.
+Replace the static task list with a query using the verified database connection pool. Task creation, updates, deletion and the Nuxt frontend remain pending.
 
 ## References
 
