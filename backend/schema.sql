@@ -1,0 +1,5 @@
+CREATE TABLE tasks (
+    id BIGINT GENERATED ALWAYS AS IDENTITY PRIMARY KEY,
+    title VARCHAR(200) NOT NULL CHECK (length(btrim(title)) > 0),
+    completed BOOLEAN NOT NULL DEFAULT FALSE
+);
