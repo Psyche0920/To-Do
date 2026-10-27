@@ -59,15 +59,20 @@ func main() {
 	mux.HandleFunc("PATCH /api/tasks/{id}", app.updateTaskHandler)
 	mux.HandleFunc("DELETE /api/tasks/{id}", app.deleteTaskHandler)
 
+	port := os.Getenv("PORT")
+	if port == "" {
+		port = "8080"
+	}
+
 	// & creates a pointer to this server struct; configuring it does not start listening.
 	server := &http.Server{
-		Addr:    ":8080",
+		Addr:    ":" + port,
 		Handler: mux,
 		// This limits reading HTTP request headers, not database work or the entire request.
 		ReadHeaderTimeout: 5 * time.Second,
 	}
 
-	log.Println("API server listening on :8080")
+	log.Printf("API server listening on :%s", port)
 	// ListenAndServe starts listening; the preceding log line only announces the attempt.
 	log.Fatal(server.ListenAndServe())
 }
