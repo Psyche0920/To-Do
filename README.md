@@ -102,7 +102,7 @@ npm ci
 npm run dev
 ```
 
-Open the address printed by Nuxt (normally `http://localhost:3000`). The page currently shows the official welcome screen. Requests to `/api/**` are forwarded to the Go API at `http://127.0.0.1:8080/api/**`; keep Go running.
+Open the address printed by Nuxt (normally `http://localhost:3000`). The page automatically loads and displays database tasks and their completion state. Requests to `/api/**` are forwarded to the Go API at `http://127.0.0.1:8080/api/**`; keep Go running.
 
 Verify forwarding from another terminal:
 
@@ -110,7 +110,7 @@ Verify forwarding from another terminal:
 curl -i http://localhost:3000/api/tasks
 ```
 
-Expect `200 OK` and the database task array. This proxy check passed manually on 2026-10-27. Automatic list loading and task controls are the next frontend work.
+Expect `200 OK` and the database task array. This proxy check passed manually on 2026-10-27. Automatic list loading and displayed completion states were also verified manually. Task controls remain pending.
 
 ## API
 
@@ -264,7 +264,7 @@ Adding `-v` to `docker compose down` deletes the database volume and its data.
 
 ## Next milestone
 
-Display real tasks in the Nuxt page, then connect creation, completion updates and deletion. Backend CRUD and the Nuxt starter/proxy milestones are complete (12/18, approximately 67%); percentages count learning milestones rather than effort.
+Connect the task creation form, then completion and deletion controls. After each successful mutation, fetch the latest list. Thirteen of eighteen learning milestones are complete (approximately 72%); percentages count learning milestones rather than effort.
 
 ## Learning notes
 
