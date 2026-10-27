@@ -1,6 +1,12 @@
 # Free-tier deployment
 
-Status: configuration prepared; accounts, database and public URLs still require setup and acceptance.
+Status: live public deployment verified on 28 October 2026.
+
+- Application: https://wehan-todo.vercel.app/
+- API: https://wehan-todo-api.onrender.com/
+- Database: Neon Free, PostgreSQL 17, Frankfurt, database `todo`.
+
+Public browser acceptance passed for create, reload persistence, completion in both directions, edit/save, edit/cancel, delete/reload and whitespace-title rejection. Only disposable test data was used and removed. Anonymous HTTP checks returned 200 for the frontend, health endpoint and task list. A complete idle/cold-start cycle was not timed. No Azure resource was created.
 
 ## Services
 

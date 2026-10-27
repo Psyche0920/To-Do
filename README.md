@@ -1,338 +1,77 @@
 # PreZero To-Do
 
-A To-Do application built with Go and PostgreSQL. The API reads tasks from PostgreSQL. Task creation is implemented; completion updates are implemented; deletion is implemented. The Nuxt starter and local API proxy are configured; the frontend can list, create, toggle completion and delete tasks. Task titles can be edited with Edit, Save and Cancel.
+A basic full-stack task manager built to explore the Go, Nuxt and PostgreSQL stack for an internship exercise. Users can create tasks, view saved tasks, mark them complete or incomplete, edit titles and delete tasks. Records persist in PostgreSQL across page reloads and container restarts.
 
-## Current status
+[Open the live demo](https://wehan-todo.vercel.app/) · [Deployment guide](docs/free-deployment.md)
 
-- Go HTTP API with health, task-list and task-creation endpoints.
-- PostgreSQL 17 running through Docker Compose with a persistent volume.
-- Task schema verified manually, including inserts, defaults and nonblank title validation.
-- pgx v5.11.0 registered through `database/sql`; startup verifies database connectivity with a five-second timeout.
-- The `application` struct shares the connection pool with the task handler through a method receiver. Task queries use a five-second timeout and inherit request cancellation.
+The application keeps its scope small: one Nuxt page, a Go HTTP API and a PostgreSQL service managed by Docker Compose. The public demo uses Vercel Hobby, Render Free and Neon Free. It has no authentication: visitors share disposable demonstration data. The backend may take about a minute to wake after inactivity.
 
-## Requirements
+## Start here
 
-- Go 1.27.3 or newer.
-- Docker Engine with Docker Compose; Docker Desktop on macOS is supported.
-- Available host ports: `8080` for the API and `5432` for PostgreSQL.
+| Document | Purpose |
+| --- | --- |
+| [Local setup and testing](docs/local-setup.md) | Start from a new Mac with VS Code: install tools, clone, configure, run and test. Includes repeat-start instructions and troubleshooting. |
+| [Architecture and workflow](docs/architecture.md) | Technology stack, file responsibilities, ports, database design and request flows. |
+| [Development and learning stages](docs/development-stages.md) | The major implementation phases, learning objectives and verification checkpoints. |
+| [Free-tier deployment](docs/free-deployment.md) | Cloud configuration, automatic deployments, schema changes and teardown. |
+| [Concept reference](docs/learning-notes.md) | Short explanations of the Go, Vue and database concepts discussed during implementation. |
 
-Run the following commands from the repository root unless stated otherwise.
+**New machine:** follow the setup guide in order. VS Code alone does not install Git, Go, Node.js or Docker. The commands target macOS with zsh; use the official installation instructions for other operating systems rather than copying shell-specific commands unchanged.
 
-## Local setup
+## Stack
 
-### 1. Configure the database
+| Layer | Technology |
+| --- | --- |
+| Frontend | Nuxt 4.6.2, Vue 3.5, TypeScript |
+| API | Go standard `net/http`, `database/sql`, pgx v5 |
+| Database | PostgreSQL 17 Alpine, Docker Compose named volume |
+| Local addresses | Nuxt `http://localhost:3000`, Go `http://localhost:8080`, PostgreSQL `localhost:5432` |
 
-On first setup, copy the environment template, set a local password and update the password in `DATABASE_URL` to match:
-
-```bash
-cp .env.example .env
-```
-
-Do not overwrite an existing `.env`. The file is ignored by Git.
-
-| Variable | Purpose | Example |
-| --- | --- | --- |
-| `POSTGRES_USER` | Initial database user | `wehan` |
-| `POSTGRES_PASSWORD` | Initial database password | Set locally |
-| `POSTGRES_DB` | Initial database name | `wehan` |
-| `DATABASE_URL` | Go API connection string | `postgres://wehan:<password>@localhost:5432/wehan?sslmode=disable` |
-
-The commands below use `wehan` as both the user and database name. Adjust `-U` and `-d` if your configuration differs. The `POSTGRES_*` variables initialize a new data volume; changing `.env` does not change an existing database's credentials. `DATABASE_URL` must use the database's actual credentials. Quote the URL in `.env` as shown in `.env.example`; URL-encode reserved characters in its password component. `sslmode=disable` is intended for this local development connection.
-
-### 2. Start PostgreSQL
-
-Start Docker Desktop or Docker Engine, then run:
-
-```bash
-docker info
-docker compose config -q
-docker compose up -d db
-docker compose exec db pg_isready -U wehan -d wehan
-```
-
-Wait for `accepting connections`. On first startup, initialization may take a few seconds; retry the readiness check if it initially reports `no response`.
-
-`pg_isready` checks server readiness. Use a SQL query to verify the configured user and database:
-
-```bash
-docker compose exec db psql -U wehan -d wehan -v ON_ERROR_STOP=1 -c "SELECT current_user, current_database();"
-```
-
-### 3. Create the task table
-
-For a new database, apply the schema once:
-
-```bash
-docker compose exec -T db psql -U wehan -d wehan -v ON_ERROR_STOP=1 < backend/schema.sql
-```
-
-Expected result: `CREATE TABLE`. If the table already exists, inspect it instead of recreating or deleting it:
-
-```bash
-docker compose exec db psql -U wehan -d wehan -c "\d tasks"
-```
-
-The schema defines an automatically generated `id`, a required title of up to 200 characters, and a `completed` flag defaulting to `false`. Empty titles and titles containing only ordinary spaces are rejected.
-
-### 4. Run the API
-
-In a separate terminal, from the repository root:
-
-```bash
-go -C backend mod download
-set -a
-source .env
-set +a
-go -C backend run ./cmd/api
-```
-
-Compose loads `.env` automatically; the Go process does not. The shell commands above export the variables from your local configuration before starting Go. Run them from the same terminal, using a `.env` file you control.
-
-A successful database check logs `Database connection established`. The API then starts listening on port `8080`; confirm HTTP readiness with the requests below. If the connection string is missing or the database check fails, startup exits with an error. Restart the process after changing Go code.
-
-For an existing setup, keep the actual working connection string in your ignored `.env`. A temporary terminal assignment is not saved to that file; sourcing an outdated `.env` will overwrite the terminal value.
-
-#### Start with an interactive password prompt (macOS zsh)
-
-If `.env` still contains an outdated connection password, use this alternative from the repository root:
-
-```zsh
-read -s "DB_PASSWORD?Database password: "
-echo
-export DATABASE_URL="postgres://wehan:${DB_PASSWORD}@localhost:5432/wehan?sslmode=disable"
-unset DB_PASSWORD
-go -C backend run ./cmd/api
-```
-
-Type the existing database password at the prompt and press Enter. Input is hidden. This example assumes a password containing only URL-safe characters; reserved characters require URL encoding. The connection URL remains exported in this terminal, not saved to `.env`. Do not source the outdated `.env` afterward, as that would overwrite it. This command does not change the database password.
-
-### 5. Run the Nuxt frontend
-
-In a separate terminal:
-
-```bash
-cd frontend
-npm ci
-npm run dev
-```
-
-Open the address printed by Nuxt (normally `http://localhost:3000`). The page automatically loads and displays database tasks and their completion state. Requests to `/api/**` are forwarded to the Go API at `http://127.0.0.1:8080/api/**`; keep Go running.
-
-Verify forwarding from another terminal:
-
-```bash
-curl -i http://localhost:3000/api/tasks
-```
-
-Expect `200 OK` and the database task array. This proxy check passed manually on 2026-10-27. Automatic list loading and displayed completion states were also verified manually. The creation form sends POST requests and refreshes the list after success. Completion controls send PATCH requests and refresh the list; deletion controls send DELETE requests and refresh the list.
+The frontend dependency lockfile fixes the installed dependency tree. See the setup guide for recorded tool versions and installation requirements.
 
 ## API
 
-| Method | Path | Current behavior |
+| Method | Path | Result |
 | --- | --- | --- |
-| `GET` | `/healthz` | Returns `{"status":"ok"}`; does not check the database. |
-| `GET` | `/api/tasks` | Returns database tasks ordered by ID; returns `[]` when empty. |
-| `POST` | `/api/tasks` | Creates a task from a title; returns `201 Created`. |
-| `PATCH` | `/api/tasks/{id}` | Updates title and/or completion; returns the task, or `404` if absent. |
-| `DELETE` | `/api/tasks/{id}` | Deletes a task; returns `204`, or `404` if absent. |
-| `GET` | `/wehan` | Learning endpoint returning a fixed status object. |
+| GET | `/healthz` | `200` with a fixed status object; not a database health check. |
+| GET | `/api/tasks` | `200` with tasks ordered by ID, or `[]` when empty. |
+| POST | `/api/tasks` | `201` with the created task. Body: `{"title":"Learn Nuxt"}`. |
+| PATCH | `/api/tasks/{id}` | `200` with the updated task. Accepts title and/or completed. |
+| DELETE | `/api/tasks/{id}` | `204` without a body; `404` if absent. |
+| GET | `/wehan` | Practice endpoint with a fixed status object. |
 
-```bash
-curl -i http://localhost:8080/healthz
-curl -i http://localhost:8080/api/tasks
-```
+Titles are trimmed and must contain 1–200 Unicode code points. Invalid requests return `400`; absent task IDs return `404`; database failures return `500`. Mutation errors use plain text; successful task responses use JSON. Nuxt forwards `/api/**` to Go; health and practice routes remain directly accessible on port 8080.
 
-Successful requests return `200 OK`. The task response is a JSON array with `id`, `title` and `completed` fields. Its contents depend on database rows. Query or result-reading failures return `500 Internal Server Error` and are logged by the API.
+## Verification and limits
 
-## Verification
+Local browser checks confirmed creation, completion changes, deletion and title editing, including reload persistence and cancellation. Database-unavailability checks confirmed creation and list error messages and subsequent recovery. Go compilation/static checks and the Nuxt production build passed. These are manual and build checks; there are no automated test files in the repository.
 
-### Frontend checks
+A clean-machine installation has not been performed on a newly provisioned operating system. The setup guide distinguishes these evidence limits from instructions a new developer can follow. The public demo was manually checked on 28 October 2026: create, completion changes, title save/cancel, delete, reload persistence and blank-title rejection passed. Test data was removed. A full idle/cold-start cycle was not timed. Localhost links work only on the machine running the services.
 
-```bash
-npm --prefix frontend run build
-```
-
-With both services running, open the Nuxt page, enter a title and select **Add task**. Confirm the task appears without reloading, the input clears, and the task remains after a browser refresh. A whitespace-only title must show a validation message without creating a task. The developer reported this step complete on 2026-10-27; the build check does not replace browser interaction checks.
-
-### Frontend completion checks
-
-With both services running, check an incomplete task and confirm it displays **Completed**. Reload the browser and confirm the state remains. Uncheck the task and repeat, expecting **Not completed**. The checkbox is disabled while an update is in progress. Failed updates show a separate completion error message; the list is requested again to reconcile displayed state.
-
-### Title editing checks
-
-Select **Edit**, change the title, and select **Save**. Reload the browser to confirm persistence. **Cancel** discards the unsaved draft. Empty or whitespace-only titles must be rejected.
-
-The PATCH endpoint accepts `title`, `completed`, or both, preserving omitted fields. Titles are trimmed and limited to 1–200 Unicode code points. An empty update is rejected. A null field is treated as omitted; at least one non-null supported field must be supplied.
-
-Local API verification on 2026-10-27 confirmed title trimming and persistence, preservation of the other field, and blank-title rejection. A disposable task was used and removed afterward. Browser acceptance on 2026-10-27 confirmed opening the editor, cancelling a changed draft without altering the saved title, submitting a new title, and retaining that title after browser reload. The disposable browser test task was removed; existing tasks were not modified.
-
-### Frontend deletion checks
-
-Create a disposable task from the page, then select its **Delete** button. Confirm it disappears and remains absent after reloading the browser. This operation permanently removes the database record. Deletion and completion controls are disabled while either mutation is in progress. Failure displays a separate deletion message.
-
-The frontend build passed; deletion persistence still requires the browser check above. Task titles can be edited; cancellation discards the frontend draft without a database write.
-
-### Go checks
-
-```bash
-gofmt -l backend/cmd/api
-go -C backend test ./...
-go -C backend vet ./...
-```
-
-`gofmt -l` should print no filenames. There are currently no automated test files; `go test` verifies package compilation, while `go vet` performs static checks.
-
-### Task creation smoke checks
-
-Restart the API after saving code changes. Create a task:
-
-```bash
-curl -i -X POST http://localhost:8080/api/tasks \
-  -H 'Content-Type: application/json' \
-  -d '{"title":"Build create-task endpoint"}'
-curl -i http://localhost:8080/api/tasks
-docker compose exec db psql -U wehan -d wehan -c "SELECT id, title, completed FROM tasks ORDER BY id;"
-```
-
-Expect `201 Created` with the generated `id`, trimmed `title` and `completed: false`. Confirm the same task appears in the list and database. Each POST adds a row.
-
-The following requests must return `400 Bad Request` without inserting tasks:
-
-```bash
-curl -i -X POST http://localhost:8080/api/tasks -d '{"title":"   "}'
-curl -i -X POST http://localhost:8080/api/tasks -d '{"title":"Task","extra":true}'
-curl -i -X POST http://localhost:8080/api/tasks -d '{"title":"Task"} {"title":"Other"}'
-```
-
-The endpoint accepts one JSON object containing only `title`, trims surrounding whitespace, and requires 1–200 Unicode code points. Request bodies are limited to 1 MiB; invalid or oversized bodies currently return `400`. Database failures return `500`. The five-second database deadline covers the insert and returned row, not the entire HTTP request.
-
-### Task update smoke checks
-
-Restart the API, then use an existing task ID:
-
-```bash
-curl -i -X PATCH http://localhost:8080/api/tasks/4 \
-  -H 'Content-Type: application/json' \
-  -d '{"completed":true}'
-curl -i http://localhost:8080/api/tasks
-```
-
-Expect `200 OK` and the updated task. Confirm the list retains the new completion state. Sending `false` marks it incomplete again. Missing or null `completed`, unknown fields and invalid IDs return `400`; a valid but absent ID returns `404`.
-
-### Task deletion smoke checks
-
-Create a disposable task and use its returned ID below (replace `5`):
-
-```bash
-curl -i -X DELETE http://localhost:8080/api/tasks/5
-curl -i -X DELETE http://localhost:8080/api/tasks/5
-```
-
-Expect `204 No Content` on the first request and `404 Not Found` on the second. Manual verification confirmed both behaviors. Deletion permanently removes the task; `RowsAffected` reads the database-reported count rather than recounting the table.
-
-### Inspect database contents
-
-PostgreSQL runs in the Compose `db` container. Database files are persisted in the Docker-managed named volume, not in the source directory.
-
-From the repository root, display saved tasks:
-
-```bash
-docker compose exec db psql -U wehan -d wehan -c "SELECT id, title, completed FROM tasks ORDER BY id;"
-```
-
-For an interactive SQL session:
-
-```bash
-docker compose exec db psql -U wehan -d wehan
-```
-
-Inside `psql`, use `\dt` to list tables, `\d tasks` to inspect the task schema, `SELECT * FROM tasks ORDER BY id;` to read rows, and `\q` to exit. `t` and `f` represent boolean true and false.
-
-Docker Desktop also shows the container under **Containers** and persistent storage under **Volumes**. With the default project name, these are typically `to-do-db-1` and `to-do_pgdata`. Use SQL to inspect records; do not edit raw volume files.
-
-### Database smoke checks
-
-Insert and read a sample task. Each execution of the insert adds a row:
-
-```bash
-docker compose exec db psql -U wehan -d wehan -v ON_ERROR_STOP=1 -c "INSERT INTO tasks (title) VALUES ('Learn PostgreSQL') RETURNING id, title, completed;"
-docker compose exec db psql -U wehan -d wehan -c "SELECT id, title, completed FROM tasks ORDER BY id;"
-```
-
-The database generates the ID and defaults `completed` to `false` (`f` in `psql`).
-
-To check title validation, record the row count, attempt an invalid insert, and check the count again:
-
-```bash
-docker compose exec db psql -U wehan -d wehan -c "SELECT COUNT(*) FROM tasks;"
-docker compose exec db psql -U wehan -d wehan -v ON_ERROR_STOP=1 -c "INSERT INTO tasks (title) VALUES ('   ');"
-docker compose exec db psql -U wehan -d wehan -c "SELECT COUNT(*) FROM tasks;"
-```
-
-The insert is expected to fail with `violates check constraint`; the row count should remain unchanged. Rejected inserts can consume identity values, so gaps in IDs are normal.
-
-Manual verification on 2026-10-26 confirmed the schema, valid inserts and SQL reads, rejection of a space-only title without increasing the row count, and successful Go database connection and HTTP server startup. The task-list HTTP response was verified against database rows. Task creation and completion updates were manually verified by the developer, including blank-title rejection and persistence visible through the list endpoint.
-
-## Project layout
+## Repository layout
 
 ```text
 .
-├── .env.example
-├── .gitignore
 ├── README.md
+├── .env.example
 ├── compose.yaml
-└── backend/
-    ├── go.mod
-    ├── go.sum
-    ├── schema.sql
-    └── cmd/api/
-        ├── database.go
-        └── main.go
+├── backend/
+│   ├── go.mod
+│   ├── go.sum
+│   ├── schema.sql
+│   └── cmd/api/
+│       ├── main.go
+│       └── database.go
+├── frontend/
+│   ├── app/app.vue
+│   ├── nuxt.config.ts
+│   ├── package.json
+│   └── package-lock.json
+└── docs/
+    ├── local-setup.md
+    ├── architecture.md
+    ├── development-stages.md
+    └── learning-notes.md
 ```
 
-The Go module is in `backend`. Compose maps host port `5432` to container port `5432` and mounts the `pgdata` volume at `/var/lib/postgresql/data`.
-
-## Stopping services
-
-Stop the Go process with `Control+C`. To stop PostgreSQL while preserving its container and data:
-
-```bash
-docker compose stop db
-```
-
-To remove Compose containers and the network while retaining the named volume:
-
-```bash
-docker compose down
-```
-
-Adding `-v` to `docker compose down` deletes the database volume and its data.
-
-## Troubleshooting
-
-| Symptom | Action |
-| --- | --- |
-| Cannot connect to `docker.sock` | Start Docker Desktop or Docker Engine and retry `docker info`. |
-| Initial readiness check reports `no response` | Wait for initialization; inspect `docker compose logs --tail=50 db` if it persists. |
-| `role "todo" does not exist` | Use the configured database user; this repository's examples use `-U wehan -d wehan`. |
-| `relation "tasks" already exists` | Inspect the table with `\d tasks`; do not rerun the initial schema against an existing table. |
-| `cannot find main module` | Use `go -C backend ...` from the repository root. |
-| `DATABASE_URL is required` | Check the exact variable name, set it in `.env`, and export the file's variables in the terminal used to start Go. |
-| `password authentication failed` | Replace any placeholder password in `DATABASE_URL` with the actual database password, encode reserved URL characters, and reload the environment. |
-| HTTP `404` or `405` after editing routes | Verify the path and uppercase HTTP method, then restart the Go process. |
-| Port already in use | Stop the previous process or select an unused host port. |
-
-## Next milestone
-
-Complete the browser persistence checks for completion and deletion, then verify loading/error states and prepare delivery. CRUD controls are implemented; implementation alone does not establish end-to-end acceptance. Milestone 16 reaches approximately 89% once both controls are verified.
-
-## Learning notes
-
-See [Backend Learning Notes](docs/learning-notes.md) for concise explanations of the core Go and database concepts.
-
-## References
-
-- [PostgreSQL Docker image and Compose example](https://github.com/docker-library/docs/blob/master/postgres/README.md)
-- [Docker Compose port mappings](https://docs.docker.com/reference/compose-file/services/#ports)
-- [PostgreSQL 17 constraints](https://www.postgresql.org/docs/17/ddl-constraints.html)
-- [pgx PostgreSQL driver](https://github.com/jackc/pgx)
+Real credentials belong in the ignored `.env`, never in source control. Dependency directories, build outputs and local credentials are excluded from Git.
