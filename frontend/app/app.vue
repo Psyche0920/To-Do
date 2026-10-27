@@ -21,7 +21,8 @@ const saving = ref(false)
 const createError = ref('')
 
 // Completion-update state is separate from creation state.
-const updating = ref(false)
+// Busy only while saving a completion change.
+const toggleTaskUpdating = ref(false)
 const toggleTaskError = ref('')
 
 async function addTask(): Promise<void> {
@@ -67,12 +68,12 @@ async function addTask(): Promise<void> {
 // Promise<void> represents completion without returning a task to the caller.
 async function toggleTask(task: Task): Promise<void> {
   // task is the selected item; Task is its type.
-  if (updating.value) {
+  if (toggleTaskUpdating.value || deleting.value) {
     return
   }
 
   toggleTaskError.value = ''
-  updating.value = true
+  toggleTaskUpdating.value = true
 
   try {
     // ! reverses the current completion state.
@@ -82,7 +83,7 @@ async function toggleTask(task: Task): Promise<void> {
     })
   } catch {
     toggleTaskError.value = 'Unable to update task. Please try again.'
-    updating.value = false
+    toggleTaskUpdating.value = false
 
     // Restore the checkbox display from the stored task state.
     await taskRequest.refresh()
@@ -93,17 +94,50 @@ async function toggleTask(task: Task): Promise<void> {
     // Repeat the list request after a successful update.
     await taskRequest.refresh()
   } finally {
-    updating.value = false
+    toggleTaskUpdating.value = false
   }
 }
+
+// Deletion has its own busy state and message.
+const deleting = ref(false)
+const deleteTaskError = ref('')
+
+async function deleteTask(task: Task): Promise<void> {
+  // Avoid overlapping deletion and completion updates.
+  if (deleting.value || toggleTaskUpdating.value) {
+    return
+  }
+
+  deleteTaskError.value = ''
+  deleting.value = true
+
+  try {
+    // DELETE returns no task body on success.
+    await $fetch(`/api/tasks/${task.id}`, {
+      method: 'DELETE',
+    })
+  } catch {
+    deleteTaskError.value = 'Unable to delete task. Please try again.'
+    deleting.value = false
+    return
+  }
+
+  try {
+    // Reload saved tasks so the deleted item disappears.
+    await taskRequest.refresh()
+  } finally {
+    deleting.value = false
+  }
+}
+
 </script>
 
 <template>
   <main>
-    <h1>To-Do</h1>
+    <h1>Wehan To-Do List</h1>
 
     <form @submit.prevent="addTask">
-      <label for="task-title">New task</label>
+      <label for="task-title"></label>
 
       <input
         id="task-title"
@@ -128,6 +162,10 @@ async function toggleTask(task: Task): Promise<void> {
       {{ toggleTaskError }}
     </p>
 
+    <p v-if="deleteTaskError" role="alert">
+      {{ deleteTaskError }}
+    </p>
+
     <!-- This if/else-if/else group selects one list display state. -->
     <p v-if="error" role="alert">
       Unable to load tasks. Check that the Go API is running.
@@ -140,13 +178,23 @@ async function toggleTask(task: Task): Promise<void> {
           <input
             type="checkbox"
             :checked="task.completed"
-            :disabled="updating"
+            :disabled="toggleTaskUpdating || deleting"
             @change="toggleTask(task)"
           >
           {{ task.title }}
         </label>
 
         — {{ task.completed ? 'Completed' : 'Not completed' }}
+
+        <!-- click triggers deletion; aria-label identifies the task for screen readers. -->
+        <button
+          type="button"
+          :disabled="deleting || toggleTaskUpdating"
+          :aria-label="`Delete ${task.title}`"
+          @click="deleteTask(task)"
+        >
+          Delete
+        </button>
       </li>
     </ul>
 

@@ -95,3 +95,12 @@
 - Error handling assigns message text in the script. Vue renders it at the template location; the paragraph itself does not call a function.
 - Independent v-if paragraphs may appear together. Only the adjacent list-error / nonempty-list / empty-list chain is mutually exclusive; creation or update errors do not inherently hide the list.
 - Template position determines page placement, not mutation execution order. Nuxt starts the app; user events invoke the registered functions.
+
+## Deletion controls
+
+- `deleteTask` sends DELETE for the selected ID; success has no task body. It then refreshes the existing list request.
+- `toggleTaskUpdating` means completion is being saved; `deleting` means deletion is running. The guards and disabled controls prevent these operations from overlapping.
+- `@click` invokes deletion on a button click; `@change` invokes completion updates when a checkbox changes. The button does not need a submit form.
+- `aria-label` gives the delete button an accessible name containing the task title; it is not a new database field or visible title editor.
+- Task title, completion text and Delete button appear in template order. Their position does not automatically execute updates or deletion.
+- The current interface supports completion changes, not title editing. Title editing remains outside the basic implementation scope.

@@ -1,6 +1,6 @@
 # PreZero To-Do
 
-A To-Do application built with Go and PostgreSQL. The API reads tasks from PostgreSQL. Task creation is implemented; completion updates are implemented; deletion is implemented. The Nuxt starter and local API proxy are configured; the frontend can list, create and toggle task completion. Deletion controls remain pending.
+A To-Do application built with Go and PostgreSQL. The API reads tasks from PostgreSQL. Task creation is implemented; completion updates are implemented; deletion is implemented. The Nuxt starter and local API proxy are configured; the frontend can list, create, toggle completion and delete tasks. Title editing is not implemented.
 
 ## Current status
 
@@ -124,7 +124,7 @@ Verify forwarding from another terminal:
 curl -i http://localhost:3000/api/tasks
 ```
 
-Expect `200 OK` and the database task array. This proxy check passed manually on 2026-10-27. Automatic list loading and displayed completion states were also verified manually. The creation form sends POST requests and refreshes the list after success. Completion controls send PATCH requests and refresh the list; deletion controls remain pending.
+Expect `200 OK` and the database task array. This proxy check passed manually on 2026-10-27. Automatic list loading and displayed completion states were also verified manually. The creation form sends POST requests and refreshes the list after success. Completion controls send PATCH requests and refresh the list; deletion controls send DELETE requests and refresh the list.
 
 ## API
 
@@ -157,6 +157,12 @@ With both services running, open the Nuxt page, enter a title and select **Add t
 ### Frontend completion checks
 
 With both services running, check an incomplete task and confirm it displays **Completed**. Reload the browser and confirm the state remains. Uncheck the task and repeat, expecting **Not completed**. The checkbox is disabled while an update is in progress. Failed updates show a separate completion error message; the list is requested again to reconcile displayed state.
+
+### Frontend deletion checks
+
+Create a disposable task from the page, then select its **Delete** button. Confirm it disappears and remains absent after reloading the browser. This operation permanently removes the database record. Deletion and completion controls are disabled while either mutation is in progress. Failure displays a separate deletion message.
+
+The frontend build passed; deletion persistence still requires the browser check above. Task titles are display-only and cannot currently be edited.
 
 ### Go checks
 
@@ -310,7 +316,7 @@ Adding `-v` to `docker compose down` deletes the database volume and its data.
 
 ## Next milestone
 
-Connect deletion controls next. The completion UI is implemented and the developer confirmed its display; verify that both checking and unchecking persist after browser reload before counting milestone 15 complete. The last fully verified count is 14/18 (approximately 78%); completing the persistence check brings it to 15/18 (approximately 83%).
+Complete the browser persistence checks for completion and deletion, then verify loading/error states and prepare delivery. CRUD controls are implemented; implementation alone does not establish end-to-end acceptance. Milestone 16 reaches approximately 89% once both controls are verified.
 
 ## Learning notes
 
