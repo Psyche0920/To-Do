@@ -164,7 +164,7 @@ Select **Edit**, change the title, and select **Save**. Reload the browser to co
 
 The PATCH endpoint accepts `title`, `completed`, or both, preserving omitted fields. Titles are trimmed and limited to 1–200 Unicode code points. An empty update is rejected. A null field is treated as omitted; at least one non-null supported field must be supplied.
 
-Local API verification on 2026-10-27 confirmed title trimming and persistence, preservation of the other field, and blank-title rejection. A disposable task was used and removed afterward. Browser-level Edit/Save/Cancel acceptance remains pending; a successful build alone does not establish it.
+Local API verification on 2026-10-27 confirmed title trimming and persistence, preservation of the other field, and blank-title rejection. A disposable task was used and removed afterward. Browser acceptance on 2026-10-27 confirmed opening the editor, cancelling a changed draft without altering the saved title, submitting a new title, and retaining that title after browser reload. The disposable browser test task was removed; existing tasks were not modified.
 
 ### Frontend deletion checks
 
