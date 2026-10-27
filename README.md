@@ -1,6 +1,6 @@
 # PreZero To-Do
 
-A To-Do application built with Go and PostgreSQL. The API reads tasks from PostgreSQL. Task creation is implemented; completion updates are implemented; deletion is implemented. The Nuxt starter and local API proxy are configured; the frontend can list and create tasks. Completion and deletion controls remain pending.
+A To-Do application built with Go and PostgreSQL. The API reads tasks from PostgreSQL. Task creation is implemented; completion updates are implemented; deletion is implemented. The Nuxt starter and local API proxy are configured; the frontend can list, create and toggle task completion. Deletion controls remain pending.
 
 ## Current status
 
@@ -124,7 +124,7 @@ Verify forwarding from another terminal:
 curl -i http://localhost:3000/api/tasks
 ```
 
-Expect `200 OK` and the database task array. This proxy check passed manually on 2026-10-27. Automatic list loading and displayed completion states were also verified manually. The creation form sends POST requests and refreshes the list after success. Completion and deletion controls remain pending.
+Expect `200 OK` and the database task array. This proxy check passed manually on 2026-10-27. Automatic list loading and displayed completion states were also verified manually. The creation form sends POST requests and refreshes the list after success. Completion controls send PATCH requests and refresh the list; deletion controls remain pending.
 
 ## API
 
@@ -153,6 +153,10 @@ npm --prefix frontend run build
 ```
 
 With both services running, open the Nuxt page, enter a title and select **Add task**. Confirm the task appears without reloading, the input clears, and the task remains after a browser refresh. A whitespace-only title must show a validation message without creating a task. The developer reported this step complete on 2026-10-27; the build check does not replace browser interaction checks.
+
+### Frontend completion checks
+
+With both services running, check an incomplete task and confirm it displays **Completed**. Reload the browser and confirm the state remains. Uncheck the task and repeat, expecting **Not completed**. The checkbox is disabled while an update is in progress. Failed updates show a separate completion error message; the list is requested again to reconcile displayed state.
 
 ### Go checks
 
@@ -306,7 +310,7 @@ Adding `-v` to `docker compose down` deletes the database volume and its data.
 
 ## Next milestone
 
-Connect completion controls, then deletion controls. After each successful mutation, fetch the latest list. Fourteen of eighteen learning milestones are complete (approximately 78%); percentages count learning milestones rather than effort.
+Connect deletion controls next. The completion UI is implemented and the developer confirmed its display; verify that both checking and unchecking persist after browser reload before counting milestone 15 complete. The last fully verified count is 14/18 (approximately 78%); completing the persistence check brings it to 15/18 (approximately 83%).
 
 ## Learning notes
 

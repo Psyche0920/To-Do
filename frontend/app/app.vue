@@ -6,28 +6,30 @@ interface Task {
   completed: boolean
 }
 
-// Load the task list when the page is initialized.
+// Load tasks when the page is initialized.
 const taskRequest = await useFetch<Task[]>('/api/tasks', {
   method: 'GET',
   default: () => [],
 })
 
-// These references do not send another request.
 const tasks = taskRequest.data
 const error = taskRequest.error
 
-// Ref values can change while their variable bindings stay constant.
+// Creation state: ref values are accessed with .value in scripts.
 const title = ref('')
 const saving = ref(false)
 const createError = ref('')
 
+// Completion-update state is separate from creation state.
+const updating = ref(false)
+const toggleTaskError = ref('')
+
 async function addTask(): Promise<void> {
-  // Prevent another creation while this submission is in progress.
+  // Ignore another creation while one is in progress.
   if (saving.value) {
     return
   }
 
-  // Clear the previous submission's error.
   createError.value = ''
 
   const cleanTitle = title.value.trim()
@@ -41,7 +43,7 @@ async function addTask(): Promise<void> {
   saving.value = true
 
   try {
-    // Wait for creation before clearing input or refreshing the list.
+    // Wait for the server to save the task.
     await $fetch<Task>('/api/tasks', {
       method: 'POST',
       body: { title: cleanTitle },
@@ -52,14 +54,46 @@ async function addTask(): Promise<void> {
     return
   }
 
+  // Clear the reusable input, not the saved database task.
   title.value = ''
 
   try {
-    // Repeat the GET request to display the saved task.
     await taskRequest.refresh()
   } finally {
-    // Re-enable the form when list refreshing finishes.
     saving.value = false
+  }
+}
+
+// Promise<void> represents completion without returning a task to the caller.
+async function toggleTask(task: Task): Promise<void> {
+  // task is the selected item; Task is its type.
+  if (updating.value) {
+    return
+  }
+
+  toggleTaskError.value = ''
+  updating.value = true
+
+  try {
+    // ! reverses the current completion state.
+    await $fetch<Task>(`/api/tasks/${task.id}`, {
+      method: 'PATCH',
+      body: { completed: !task.completed },
+    })
+  } catch {
+    toggleTaskError.value = 'Unable to update task. Please try again.'
+    updating.value = false
+
+    // Restore the checkbox display from the stored task state.
+    await taskRequest.refresh()
+    return
+  }
+
+  try {
+    // Repeat the list request after a successful update.
+    await taskRequest.refresh()
+  } finally {
+    updating.value = false
   }
 }
 </script>
@@ -85,18 +119,34 @@ async function addTask(): Promise<void> {
       </button>
     </form>
 
+    <!-- Error messages are independent display rules, not function calls. -->
     <p v-if="createError" role="alert">
       {{ createError }}
     </p>
 
+    <p v-if="toggleTaskError" role="alert">
+      {{ toggleTaskError }}
+    </p>
+
+    <!-- This if/else-if/else group selects one list display state. -->
     <p v-if="error" role="alert">
       Unable to load tasks. Check that the Go API is running.
     </p>
 
     <ul v-else-if="tasks.length > 0">
       <li v-for="task in tasks" :key="task.id">
-        {{ task.title }} —
-        {{ task.completed ? 'Completed' : 'Not completed' }}
+        <label>
+          <!-- checked displays stored state; change triggers the script function. -->
+          <input
+            type="checkbox"
+            :checked="task.completed"
+            :disabled="updating"
+            @change="toggleTask(task)"
+          >
+          {{ task.title }}
+        </label>
+
+        — {{ task.completed ? 'Completed' : 'Not completed' }}
       </li>
     </ul>
 

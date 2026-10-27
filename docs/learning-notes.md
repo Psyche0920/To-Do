@@ -84,3 +84,14 @@
 - `<main>` is an HTML content region, not the program entry point. Script prepares logic and state; the template renders state and reacts to changes.
 - `@submit.prevent` calls the submit handler without a browser navigation. `v-model` binds input and state; `:disabled` reads a boolean; required blocks empty input but not whitespace-only text.
 - Creation errors and list errors are independent. `v-for` displays items; it does not execute the tasks themselves.
+
+## Completion controls and template conditions
+
+- `toggleTask(task: Task)` receives the selected task; lowercase task is the parameter and uppercase Task is its type. Toggle means switch between two states.
+- `Promise<void>` describes an asynchronous completion with no concrete return value; it does not mean the function has no effects.
+- The PATCH body sends the opposite of the frontend task's current completed value. The server stores that explicit value; it does not perform the inversion itself.
+- `updating` tracks an in-progress completion update. `toggleTaskError` stores its error text. These are separate from creation's saving and createError.
+- `:checked` displays the task's completion value; `@change` invokes the handler when the checkbox changes. No separate submit form is needed.
+- Error handling assigns message text in the script. Vue renders it at the template location; the paragraph itself does not call a function.
+- Independent v-if paragraphs may appear together. Only the adjacent list-error / nonempty-list / empty-list chain is mutually exclusive; creation or update errors do not inherently hide the list.
+- Template position determines page placement, not mutation execution order. Nuxt starts the app; user events invoke the registered functions.
