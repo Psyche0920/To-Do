@@ -37,3 +37,9 @@ Export any required data first. Delete the demo projects/services from Vercel, R
 - https://neon.com/pricing
 - https://vercel.com/docs/frameworks/full-stack/nuxt
 - https://vercel.com/docs/environment-variables
+
+## Updates and schema changes
+
+With Git-based automatic deployment enabled, a push to `main` rebuilds the affected Go and Nuxt services. Failed builds do not mean a new version is live. PostgreSQL data remains in Neon, separately from the application deployment.
+
+Changes to `backend/schema.sql` are not automatically applied to Neon. For a future schema change, write a numbered SQL migration, back up important data, test it against a disposable database, and execute it once through Neon's SQL Editor against the correct project/database. Deploy compatible application code in a safe order. Do not rerun the original `CREATE TABLE tasks` script against an existing database or drop the table to update it. No migration was needed for the current deployment.

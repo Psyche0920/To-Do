@@ -7,7 +7,7 @@ services:
     plan: free
     region: frankfurt
     healthCheckPath: /healthz
-    autoDeployTrigger: off
+    autoDeployTrigger: commit
     envVars:
       - key: DATABASE_URL
         sync: false
