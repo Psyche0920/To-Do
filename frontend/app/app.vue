@@ -68,7 +68,7 @@ async function addTask(): Promise<void> {
 // Promise<void> represents completion without returning a task to the caller.
 async function toggleTask(task: Task): Promise<void> {
   // task is the selected item; Task is its type.
-  if (toggleTaskUpdating.value || deleting.value) {
+  if (toggleTaskUpdating.value || deleting.value || editingTitleSaving.value) {
     return
   }
 
@@ -104,7 +104,7 @@ const deleteTaskError = ref('')
 
 async function deleteTask(task: Task): Promise<void> {
   // Avoid overlapping deletion and completion updates.
-  if (deleting.value || toggleTaskUpdating.value) {
+  if (deleting.value || toggleTaskUpdating.value || editingTitleSaving.value) {
     return
   }
 
@@ -127,6 +127,59 @@ async function deleteTask(task: Task): Promise<void> {
     await taskRequest.refresh()
   } finally {
     deleting.value = false
+  }
+}
+
+// Edit a draft; cancel leaves the saved title unchanged.
+// null means no task is currently being edited.
+const editingTaskId = ref<number | null>(null)
+const editingTitle = ref('')
+const editingTitleSaving = ref(false)
+const editTaskError = ref('')
+
+// Sets editing state; void means no value is returned.
+function startEditingTask(task: Task): void {
+  editingTaskId.value = task.id
+  editingTitle.value = task.title
+  editTaskError.value = ''
+}
+
+function cancelEditingTask(): void {
+  editingTaskId.value = null
+  editingTitle.value = ''
+  editTaskError.value = ''
+}
+
+async function editTaskTitle(task: Task): Promise<void> {
+  if (editingTitleSaving.value || toggleTaskUpdating.value || deleting.value) {
+    return
+  }
+
+  editTaskError.value = ''
+  const cleanTitle = editingTitle.value.trim()
+  const titleLength = Array.from(cleanTitle).length
+  if (titleLength === 0 || titleLength > 200) {
+    editTaskError.value = 'Title must contain 1 to 200 characters.'
+    return
+  }
+
+  editingTitleSaving.value = true
+  try {
+    await $fetch<Task>(`/api/tasks/${task.id}`, {
+      method: 'PATCH',
+      body: { title: cleanTitle },
+    })
+  } catch {
+    editTaskError.value = 'Unable to edit task. Please try again.'
+    editingTitleSaving.value = false
+    return
+  }
+
+  cancelEditingTask()
+  try {
+    await taskRequest.refresh()
+  } finally {
+    editingTitleSaving.value = false
   }
 }
 
@@ -166,6 +219,8 @@ async function deleteTask(task: Task): Promise<void> {
       {{ deleteTaskError }}
     </p>
 
+    <p v-if="editTaskError" role="alert">{{ editTaskError }}</p>
+
     <!-- This if/else-if/else group selects one list display state. -->
     <p v-if="error" role="alert">
       Unable to load tasks. Check that the Go API is running.
@@ -178,7 +233,7 @@ async function deleteTask(task: Task): Promise<void> {
           <input
             type="checkbox"
             :checked="task.completed"
-            :disabled="toggleTaskUpdating || deleting"
+            :disabled="toggleTaskUpdating || deleting || editingTitleSaving"
             @change="toggleTask(task)"
           >
           {{ task.title }}
@@ -186,10 +241,32 @@ async function deleteTask(task: Task): Promise<void> {
 
         — {{ task.completed ? 'Completed' : 'Not completed' }}
 
-        <!-- click triggers deletion; aria-label identifies the task for screen readers. -->
+        <form v-if="editingTaskId === task.id" @submit.prevent="editTaskTitle(task)">
+          <label :for="`edit-title-${task.id}`"></label>
+          <input
+            :id="`edit-title-${task.id}`"
+            v-model="editingTitle"
+            :disabled="editingTitleSaving"
+            required
+          >
+          <button type="submit" :disabled="editingTitleSaving">Submit</button>
+          <button type="button" :disabled="editingTitleSaving" @click="cancelEditingTask">
+            Cancel
+          </button>
+        </form>
+        <button
+          v-else
+          type="button"
+          :disabled="toggleTaskUpdating || deleting || editingTitleSaving"
+          :aria-label="`Edit ${task.title}`"
+          @click="startEditingTask(task)"
+        >
+          Edit
+        </button>
+
         <button
           type="button"
-          :disabled="deleting || toggleTaskUpdating"
+          :disabled="deleting || toggleTaskUpdating || editingTitleSaving"
           :aria-label="`Delete ${task.title}`"
           @click="deleteTask(task)"
         >

@@ -104,3 +104,10 @@
 - `aria-label` gives the delete button an accessible name containing the task title; it is not a new database field or visible title editor.
 - Task title, completion text and Delete button appear in template order. Their position does not automatically execute updates or deletion.
 - The current interface supports completion changes, not title editing. Title editing remains outside the basic implementation scope.
+
+## Title editing
+
+- `startEditingTask` opens an editor using the selected ID and current title; it sends no database request. null editingTaskId means no editor is open.
+- The draft is separate from the saved title. Cancel discards it; the edit form's submit event calls `editTaskTitle` to send PATCH.
+- A Save button can have type submit: submit describes its behavior, while Save is its visible text.
+- Go accepts optional title and completion fields. COALESCE preserves an existing database value when the corresponding argument is omitted.

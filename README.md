@@ -1,6 +1,6 @@
 # PreZero To-Do
 
-A To-Do application built with Go and PostgreSQL. The API reads tasks from PostgreSQL. Task creation is implemented; completion updates are implemented; deletion is implemented. The Nuxt starter and local API proxy are configured; the frontend can list, create, toggle completion and delete tasks. Title editing is not implemented.
+A To-Do application built with Go and PostgreSQL. The API reads tasks from PostgreSQL. Task creation is implemented; completion updates are implemented; deletion is implemented. The Nuxt starter and local API proxy are configured; the frontend can list, create, toggle completion and delete tasks. Task titles can be edited with Edit, Save and Cancel.
 
 ## Current status
 
@@ -133,7 +133,7 @@ Expect `200 OK` and the database task array. This proxy check passed manually on
 | `GET` | `/healthz` | Returns `{"status":"ok"}`; does not check the database. |
 | `GET` | `/api/tasks` | Returns database tasks ordered by ID; returns `[]` when empty. |
 | `POST` | `/api/tasks` | Creates a task from a title; returns `201 Created`. |
-| `PATCH` | `/api/tasks/{id}` | Updates completion; returns the updated task, or `404` if absent. |
+| `PATCH` | `/api/tasks/{id}` | Updates title and/or completion; returns the task, or `404` if absent. |
 | `DELETE` | `/api/tasks/{id}` | Deletes a task; returns `204`, or `404` if absent. |
 | `GET` | `/wehan` | Learning endpoint returning a fixed status object. |
 
@@ -158,11 +158,19 @@ With both services running, open the Nuxt page, enter a title and select **Add t
 
 With both services running, check an incomplete task and confirm it displays **Completed**. Reload the browser and confirm the state remains. Uncheck the task and repeat, expecting **Not completed**. The checkbox is disabled while an update is in progress. Failed updates show a separate completion error message; the list is requested again to reconcile displayed state.
 
+### Title editing checks
+
+Select **Edit**, change the title, and select **Save**. Reload the browser to confirm persistence. **Cancel** discards the unsaved draft. Empty or whitespace-only titles must be rejected.
+
+The PATCH endpoint accepts `title`, `completed`, or both, preserving omitted fields. Titles are trimmed and limited to 1–200 Unicode code points. An empty update is rejected. A null field is treated as omitted; at least one non-null supported field must be supplied.
+
+Local API verification on 2026-10-27 confirmed title trimming and persistence, preservation of the other field, and blank-title rejection. A disposable task was used and removed afterward. Browser-level Edit/Save/Cancel acceptance remains pending; a successful build alone does not establish it.
+
 ### Frontend deletion checks
 
 Create a disposable task from the page, then select its **Delete** button. Confirm it disappears and remains absent after reloading the browser. This operation permanently removes the database record. Deletion and completion controls are disabled while either mutation is in progress. Failure displays a separate deletion message.
 
-The frontend build passed; deletion persistence still requires the browser check above. Task titles are display-only and cannot currently be edited.
+The frontend build passed; deletion persistence still requires the browser check above. Task titles can be edited; cancellation discards the frontend draft without a database write.
 
 ### Go checks
 

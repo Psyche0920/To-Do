@@ -222,9 +222,10 @@ func (app *application) updateTaskHandler(w http.ResponseWriter, r *http.Request
 		return
 	}
 
-	// A pointer distinguishes missing completed from explicit false.
+	// Pointers distinguish omitted fields from explicit values.
 	var input struct {
-		Completed *bool `json:"completed"`
+		Title     *string `json:"title"`
+		Completed *bool   `json:"completed"`
 	}
 
 	r.Body = http.MaxBytesReader(w, r.Body, 1<<20)
@@ -246,9 +247,19 @@ func (app *application) updateTaskHandler(w http.ResponseWriter, r *http.Request
 		return
 	}
 
-	if input.Completed == nil {
-		http.Error(w, "Completed must be true or false", http.StatusBadRequest)
+	if input.Completed == nil && input.Title == nil {
+		http.Error(w, "Provide title or completed", http.StatusBadRequest)
 		return
+	}
+
+	if input.Title != nil {
+		cleanTitle := strings.TrimSpace(*input.Title)
+		titleLength := len([]rune(cleanTitle))
+		if titleLength == 0 || titleLength > 200 {
+			http.Error(w, "Title must contain 1 to 200 characters", http.StatusBadRequest)
+			return
+		}
+		input.Title = &cleanTitle
 	}
 
 	// Limit the database update and returned row to five seconds.
@@ -262,8 +273,9 @@ func (app *application) updateTaskHandler(w http.ResponseWriter, r *http.Request
 	// Update and return the task.
 	row := app.db.QueryRowContext(
 		ctx,
-		"UPDATE tasks SET completed = $1 WHERE id = $2 RETURNING id, title, completed",
-		*input.Completed,
+		"UPDATE tasks SET title = COALESCE($1, title), completed = COALESCE($2, completed) WHERE id = $3 RETURNING id, title, completed",
+		input.Title,
+		input.Completed,
 		id,
 	)
 
