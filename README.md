@@ -1,6 +1,6 @@
 # PreZero To-Do
 
-A To-Do application built with Go and PostgreSQL. The API reads tasks from PostgreSQL. Task creation is implemented; completion updates are implemented; deletion is implemented. The Nuxt starter and local API proxy are configured; frontend task interactions remain pending.
+A To-Do application built with Go and PostgreSQL. The API reads tasks from PostgreSQL. Task creation is implemented; completion updates are implemented; deletion is implemented. The Nuxt starter and local API proxy are configured; the frontend can list and create tasks. Completion and deletion controls remain pending.
 
 ## Current status
 
@@ -92,6 +92,20 @@ A successful database check logs `Database connection established`. The API then
 
 For an existing setup, keep the actual working connection string in your ignored `.env`. A temporary terminal assignment is not saved to that file; sourcing an outdated `.env` will overwrite the terminal value.
 
+#### Start with an interactive password prompt (macOS zsh)
+
+If `.env` still contains an outdated connection password, use this alternative from the repository root:
+
+```zsh
+read -s "DB_PASSWORD?Database password: "
+echo
+export DATABASE_URL="postgres://wehan:${DB_PASSWORD}@localhost:5432/wehan?sslmode=disable"
+unset DB_PASSWORD
+go -C backend run ./cmd/api
+```
+
+Type the existing database password at the prompt and press Enter. Input is hidden. This example assumes a password containing only URL-safe characters; reserved characters require URL encoding. The connection URL remains exported in this terminal, not saved to `.env`. Do not source the outdated `.env` afterward, as that would overwrite it. This command does not change the database password.
+
 ### 5. Run the Nuxt frontend
 
 In a separate terminal:
@@ -110,7 +124,7 @@ Verify forwarding from another terminal:
 curl -i http://localhost:3000/api/tasks
 ```
 
-Expect `200 OK` and the database task array. This proxy check passed manually on 2026-10-27. Automatic list loading and displayed completion states were also verified manually. Task controls remain pending.
+Expect `200 OK` and the database task array. This proxy check passed manually on 2026-10-27. Automatic list loading and displayed completion states were also verified manually. The creation form sends POST requests and refreshes the list after success. Completion and deletion controls remain pending.
 
 ## API
 
@@ -131,6 +145,14 @@ curl -i http://localhost:8080/api/tasks
 Successful requests return `200 OK`. The task response is a JSON array with `id`, `title` and `completed` fields. Its contents depend on database rows. Query or result-reading failures return `500 Internal Server Error` and are logged by the API.
 
 ## Verification
+
+### Frontend checks
+
+```bash
+npm --prefix frontend run build
+```
+
+With both services running, open the Nuxt page, enter a title and select **Add task**. Confirm the task appears without reloading, the input clears, and the task remains after a browser refresh. A whitespace-only title must show a validation message without creating a task. The developer reported this step complete on 2026-10-27; the build check does not replace browser interaction checks.
 
 ### Go checks
 
@@ -189,6 +211,26 @@ curl -i -X DELETE http://localhost:8080/api/tasks/5
 ```
 
 Expect `204 No Content` on the first request and `404 Not Found` on the second. Manual verification confirmed both behaviors. Deletion permanently removes the task; `RowsAffected` reads the database-reported count rather than recounting the table.
+
+### Inspect database contents
+
+PostgreSQL runs in the Compose `db` container. Database files are persisted in the Docker-managed named volume, not in the source directory.
+
+From the repository root, display saved tasks:
+
+```bash
+docker compose exec db psql -U wehan -d wehan -c "SELECT id, title, completed FROM tasks ORDER BY id;"
+```
+
+For an interactive SQL session:
+
+```bash
+docker compose exec db psql -U wehan -d wehan
+```
+
+Inside `psql`, use `\dt` to list tables, `\d tasks` to inspect the task schema, `SELECT * FROM tasks ORDER BY id;` to read rows, and `\q` to exit. `t` and `f` represent boolean true and false.
+
+Docker Desktop also shows the container under **Containers** and persistent storage under **Volumes**. With the default project name, these are typically `to-do-db-1` and `to-do_pgdata`. Use SQL to inspect records; do not edit raw volume files.
 
 ### Database smoke checks
 
@@ -264,7 +306,7 @@ Adding `-v` to `docker compose down` deletes the database volume and its data.
 
 ## Next milestone
 
-Connect the task creation form, then completion and deletion controls. After each successful mutation, fetch the latest list. Thirteen of eighteen learning milestones are complete (approximately 72%); percentages count learning milestones rather than effort.
+Connect completion controls, then deletion controls. After each successful mutation, fetch the latest list. Fourteen of eighteen learning milestones are complete (approximately 78%); percentages count learning milestones rather than effort.
 
 ## Learning notes
 

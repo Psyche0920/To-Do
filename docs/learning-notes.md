@@ -70,3 +70,17 @@
 - The Go API queries PostgreSQL and returns JSON. The frontend renders selected fields; it never accesses PostgreSQL directly.
 - Backend validation decides which inputs can be saved. Frontend code displays feedback; a TypeScript interface is not an input validator.
 - Future creation, update and deletion controls need separate requests, followed by refreshing the list. They are not automatically connected by defining the list request.
+
+## Creation form flow
+
+- `const` prevents rebinding a variable; a ref object's `.value` can still change. In templates, Vue unwraps refs automatically.
+- `saving` blocks another creation submission, not every operation or every task. It means busy, not successful.
+- `createError` stores message text. Clear it before a new attempt so old feedback does not remain.
+- `trim()` removes surrounding whitespace. `Array.from(title).length` counts Unicode code points, like Go rune counting.
+- `async` allows await in this function. Await pauses that function until its operation settles; the page can process other events during the wait.
+- Creation must finish successfully before refreshing the list. `taskRequest.refresh()` repeats the existing GET and updates the same data state; it does not reload the whole page.
+- `catch` handles failure; `finally` runs when the try block finishes whether it succeeded or failed, restoring the form's enabled state.
+- There is one reusable title input, not one editable input per task. Clearing it after saving does not delete stored tasks.
+- `<main>` is an HTML content region, not the program entry point. Script prepares logic and state; the template renders state and reacts to changes.
+- `@submit.prevent` calls the submit handler without a browser navigation. `v-model` binds input and state; `:disabled` reads a boolean; required blocks empty input but not whitespace-only text.
+- Creation errors and list errors are independent. `v-for` displays items; it does not execute the tasks themselves.
