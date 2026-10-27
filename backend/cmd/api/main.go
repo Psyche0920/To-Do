@@ -57,6 +57,7 @@ func main() {
 	mux.HandleFunc("GET /api/tasks", app.listTasksHandler)
 	mux.HandleFunc("POST /api/tasks", app.createTaskHandler)
 	mux.HandleFunc("PATCH /api/tasks/{id}", app.updateTaskHandler)
+	mux.HandleFunc("DELETE /api/tasks/{id}", app.deleteTaskHandler)
 
 	// & creates a pointer to this server struct; configuring it does not start listening.
 	server := &http.Server{
@@ -286,4 +287,47 @@ func (app *application) updateTaskHandler(w http.ResponseWriter, r *http.Request
 	if encodeErr != nil {
 		log.Printf("write updated task response: %v", encodeErr)
 	}
+}
+
+func (app *application) deleteTaskHandler(w http.ResponseWriter, r *http.Request) {
+	idText := r.PathValue("id")
+	id, idErr := strconv.ParseInt(idText, 10, 64)
+	if idErr != nil || id <= 0 {
+		http.Error(w, "Invalid task ID", http.StatusBadRequest)
+		return
+	}
+
+	// Limit the database deletion to five seconds.
+	requestContext := r.Context()
+	timeout := 5 * time.Second
+	ctx, cancel := context.WithTimeout(requestContext, timeout)
+	defer cancel()
+
+	// Delete the task without returning a result row.
+	result, deleteErr := app.db.ExecContext(
+		ctx,
+		"DELETE FROM tasks WHERE id = $1",
+		id,
+	)
+	if deleteErr != nil {
+		log.Printf("delete task: %v", deleteErr)
+		http.Error(w, "Unable to delete task", http.StatusInternalServerError)
+		return
+	}
+
+	// Read the deleted-row count reported by the database: 0 means not found.
+	affected, affectedErr := result.RowsAffected()
+	if affectedErr != nil {
+		log.Printf("read deleted task count: %v", affectedErr)
+		http.Error(w, "Unable to delete task", http.StatusInternalServerError)
+		return
+	}
+
+	if affected == 0 {
+		http.Error(w, "Task not found", http.StatusNotFound)
+		return
+	}
+
+	// Successful deletion has no response body.
+	w.WriteHeader(http.StatusNoContent)
 }

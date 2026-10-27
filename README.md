@@ -1,6 +1,6 @@
 # PreZero To-Do
 
-A To-Do application built with Go and PostgreSQL. The API reads tasks from PostgreSQL. Task creation is implemented; completion updates are implemented; deletion and the Nuxt frontend remain pending.
+A To-Do application built with Go and PostgreSQL. The API reads tasks from PostgreSQL. Task creation is implemented; completion updates are implemented; deletion is implemented. The Nuxt starter and local API proxy are configured; frontend task interactions remain pending.
 
 ## Current status
 
@@ -92,6 +92,26 @@ A successful database check logs `Database connection established`. The API then
 
 For an existing setup, keep the actual working connection string in your ignored `.env`. A temporary terminal assignment is not saved to that file; sourcing an outdated `.env` will overwrite the terminal value.
 
+### 5. Run the Nuxt frontend
+
+In a separate terminal:
+
+```bash
+cd frontend
+npm ci
+npm run dev
+```
+
+Open the address printed by Nuxt (normally `http://localhost:3000`). The page currently shows the official welcome screen. Requests to `/api/**` are forwarded to the Go API at `http://127.0.0.1:8080/api/**`; keep Go running.
+
+Verify forwarding from another terminal:
+
+```bash
+curl -i http://localhost:3000/api/tasks
+```
+
+Expect `200 OK` and the database task array. This proxy check passed manually on 2026-10-27. Automatic list loading and task controls are the next frontend work.
+
 ## API
 
 | Method | Path | Current behavior |
@@ -100,6 +120,7 @@ For an existing setup, keep the actual working connection string in your ignored
 | `GET` | `/api/tasks` | Returns database tasks ordered by ID; returns `[]` when empty. |
 | `POST` | `/api/tasks` | Creates a task from a title; returns `201 Created`. |
 | `PATCH` | `/api/tasks/{id}` | Updates completion; returns the updated task, or `404` if absent. |
+| `DELETE` | `/api/tasks/{id}` | Deletes a task; returns `204`, or `404` if absent. |
 | `GET` | `/wehan` | Learning endpoint returning a fixed status object. |
 
 ```bash
@@ -157,6 +178,17 @@ curl -i http://localhost:8080/api/tasks
 ```
 
 Expect `200 OK` and the updated task. Confirm the list retains the new completion state. Sending `false` marks it incomplete again. Missing or null `completed`, unknown fields and invalid IDs return `400`; a valid but absent ID returns `404`.
+
+### Task deletion smoke checks
+
+Create a disposable task and use its returned ID below (replace `5`):
+
+```bash
+curl -i -X DELETE http://localhost:8080/api/tasks/5
+curl -i -X DELETE http://localhost:8080/api/tasks/5
+```
+
+Expect `204 No Content` on the first request and `404 Not Found` on the second. Manual verification confirmed both behaviors. Deletion permanently removes the task; `RowsAffected` reads the database-reported count rather than recounting the table.
 
 ### Database smoke checks
 
@@ -232,7 +264,7 @@ Adding `-v` to `docker compose down` deletes the database volume and its data.
 
 ## Next milestone
 
-Implement task deletion, then build the Nuxt frontend. Ten of eighteen learning milestones are complete (approximately 56%); this measures milestone count, not remaining effort.
+Display real tasks in the Nuxt page, then connect creation, completion updates and deletion. Backend CRUD and the Nuxt starter/proxy milestones are complete (12/18, approximately 67%); percentages count learning milestones rather than effort.
 
 ## Learning notes
 
