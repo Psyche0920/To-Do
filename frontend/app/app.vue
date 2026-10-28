@@ -15,13 +15,11 @@ const taskRequest = await useFetch<Task[]>('/api/tasks', {
 const tasks = taskRequest.data
 const error = taskRequest.error
 
-// Creation state: ref values are accessed with .value in scripts.
 const title = ref('')
 const saving = ref(false)
 const createError = ref('')
 
 // Completion-update state is separate from creation state.
-// Busy only while saving a completion change.
 const toggleTaskUpdating = ref(false)
 const toggleTaskError = ref('')
 
@@ -65,9 +63,7 @@ async function addTask(): Promise<void> {
   }
 }
 
-// Promise<void> represents completion without returning a task to the caller.
 async function toggleTask(task: Task): Promise<void> {
-  // task is the selected item; Task is its type.
   if (toggleTaskUpdating.value || deleting.value || editingTitleSaving.value) {
     return
   }
@@ -83,10 +79,13 @@ async function toggleTask(task: Task): Promise<void> {
     })
   } catch {
     toggleTaskError.value = 'Unable to update task. Please try again.'
-    toggleTaskUpdating.value = false
 
-    // Restore the checkbox display from the stored task state.
-    await taskRequest.refresh()
+    // Restore the checkbox display before allowing another update.
+    try {
+      await taskRequest.refresh()
+    } finally {
+      toggleTaskUpdating.value = false
+    }
     return
   }
 
@@ -137,7 +136,6 @@ const editingTitle = ref('')
 const editingTitleSaving = ref(false)
 const editTaskError = ref('')
 
-// Sets editing state; void means no value is returned.
 function startEditingTask(task: Task): void {
   editingTaskId.value = task.id
   editingTitle.value = task.title
@@ -182,7 +180,6 @@ async function editTaskTitle(task: Task): Promise<void> {
     editingTitleSaving.value = false
   }
 }
-
 </script>
 
 <template>
@@ -190,7 +187,7 @@ async function editTaskTitle(task: Task): Promise<void> {
     <h1>Wehan To-Do List</h1>
 
     <form @submit.prevent="addTask">
-      <label for="task-title"></label>
+      <label for="task-title">New task</label>
 
       <input
         id="task-title"
@@ -206,7 +203,6 @@ async function editTaskTitle(task: Task): Promise<void> {
       </button>
     </form>
 
-    <!-- Error messages are independent display rules, not function calls. -->
     <p v-if="createError" role="alert">
       {{ createError }}
     </p>
@@ -219,9 +215,10 @@ async function editTaskTitle(task: Task): Promise<void> {
       {{ deleteTaskError }}
     </p>
 
-    <p v-if="editTaskError" role="alert">{{ editTaskError }}</p>
+    <p v-if="editTaskError" role="alert">
+      {{ editTaskError }}
+    </p>
 
-    <!-- This if/else-if/else group selects one list display state. -->
     <p v-if="error" role="alert">
       Unable to load tasks. Check that the Go API is running.
     </p>
@@ -242,14 +239,16 @@ async function editTaskTitle(task: Task): Promise<void> {
         — {{ task.completed ? 'Completed' : 'Not completed' }}
 
         <form v-if="editingTaskId === task.id" @submit.prevent="editTaskTitle(task)">
-          <label :for="`edit-title-${task.id}`"></label>
+          <label :for="`edit-title-${task.id}`">Task title</label>
           <input
             :id="`edit-title-${task.id}`"
             v-model="editingTitle"
             :disabled="editingTitleSaving"
             required
           >
-          <button type="submit" :disabled="editingTitleSaving">Submit</button>
+          <button type="submit" :disabled="editingTitleSaving">
+            Submit
+          </button>
           <button type="button" :disabled="editingTitleSaving" @click="cancelEditingTask">
             Cancel
           </button>

@@ -1,56 +1,35 @@
-# Local Setup and Testing
+# Local setup and testing
 
-This guide targets a new **macOS machine using zsh and VS Code**. Commands are shell commands unless labelled SQL. Copy commands only, without terminal prompts or example output. Execute each numbered stage and confirm its checkpoint before continuing.
+For macOS with zsh and VS Code. Run commands from the repository root unless stated otherwise.
 
 ## 1. Install tools
 
-Install the tools below using their official installers. Choose Apple silicon/ARM64 for an Apple silicon Mac and Intel/x64 for an Intel Mac. Reopen the VS Code terminal after installation so PATH changes are loaded.
+| Tool | Install |
+| --- | --- |
+| Git | [Git downloads](https://git-scm.com/downloads/) or `xcode-select --install` |
+| Go 1.27.3 or newer | [Go installation](https://go.dev/doc/install) |
+| Node.js and npm | [Node.js downloads](https://nodejs.org/en/download); use a supported LTS release |
+| Docker Desktop | [Mac installation](https://docs.docker.com/desktop/setup/install/mac-install/) |
 
-| Tool | Installation | Required for |
-| --- | --- | --- |
-| Git | [Official downloads](https://git-scm.com/downloads/) | Cloning the repository. On macOS, `xcode-select --install` can install Apple's command-line tools, including Git. Complete the installer before continuing. |
-| Go | [Official installation](https://go.dev/doc/install) | Go 1.27.3 or newer, matching the module's `go` directive. If that version is unavailable in your distribution, resolve the toolchain requirement before proceeding rather than silently downgrading the module. |
-| Node.js and npm | [Official downloads](https://nodejs.org/en/download) | Install a supported current LTS release with npm. The existing Mac was verified with Node 26.10.0 and npm 11.19.1; other versions still need the build check below. |
-| Docker Desktop | [Official Mac installation](https://docs.docker.com/desktop/setup/install/mac-install/) | Runs PostgreSQL and includes Docker Compose. Installing the application alone does not start its engine. |
+Reopen the VS Code terminal after installation. PostgreSQL runs in Docker; no separate installation is needed.
 
-Go and Vue editor extensions are optional; they do not replace the runtimes. PostgreSQL and psql do **not** need a separate host installation: both run in the database container. Homebrew is optional, not a prerequisite for these instructions.
-
-Open **Terminal → New Terminal** in VS Code and check:
-
-```bash
+```sh
 git --version
 go version
 node --version
 npm --version
-docker --version
 docker compose version
 ```
 
-Checkpoint: every command prints a version, not `command not found`. Reserve ports 3000, 8080 and 5432. Avoid starting multiple copies of the same service.
+## 2. Clone and configure
 
-## 2. Clone and open the repository
-
-In a terminal, choose a parent directory where you keep projects:
-
-```bash
+```sh
 git clone https://github.com/Psyche0920/To-Do.git
 cd To-Do
-pwd
-```
-
-In VS Code, use **File → Open Folder** and select this `To-Do` directory. All subsequent root-relative commands assume the terminal is in this directory. In each new terminal, navigate back to the same checkout. Do not copy another person's absolute home directory.
-
-If Git reports authentication or repository-access errors, resolve access first. If `To-Do` already exists, open the existing checkout rather than cloning into it.
-
-## 3. Configure local credentials
-
-For a fresh clone only:
-
-```bash
 cp .env.example .env
 ```
 
-Open `.env` in VS Code. Choose a local development password and replace **both** password placeholders with the same value:
+Open the folder in VS Code. Edit `.env`, replacing both password placeholders with the same local password:
 
 ```dotenv
 POSTGRES_USER=wehan
@@ -59,68 +38,36 @@ POSTGRES_DB=wehan
 DATABASE_URL='postgres://wehan:YOUR_LOCAL_PASSWORD@localhost:5432/wehan?sslmode=disable'
 ```
 
-`YOUR_LOCAL_PASSWORD` is a placeholder, not a working password. For the simplest first setup, choose a password containing only letters and numbers. Other characters may require shell quoting and percent-encoding in the URL password component. Save the file before continuing. Do not commit it.
+Use letters and numbers for a simple URL-safe local password. Keep `.env` out of Git. Existing database volumes retain their original credentials; editing `.env` does not change them.
 
-The user and database names in this guide are `wehan`. If you change them, adjust both `.env` and every `psql -U ... -d ...` command consistently. Disabling TLS here is for a local development connection only.
+## 3. Start the database
 
-**Existing database:** PostgreSQL initialization variables only apply when the data volume is first created. Changing `.env` does not change credentials inside an existing volume. Use the actual existing credentials; never delete a volume just to resolve a password mismatch.
-
-## 4. Start Docker, then PostgreSQL
-
-Open Docker Desktop from Applications, or on macOS run:
-
-```bash
+```sh
 open -a Docker
 ```
 
-Wait until Docker Desktop says its engine is running. Then, in the repository root:
+Wait for Docker Desktop's engine to start, then run:
 
-```bash
+```sh
 docker info
 docker compose config -q
 docker compose up -d db
-docker compose ps db
 docker compose exec db pg_isready -U wehan -d wehan
 ```
 
-Checkpoints:
+Continue when readiness reports `accepting connections`. If initialization is still running, retry the readiness command.
 
-- `docker info` connects to the daemon. If it does not, stop here and start Docker Desktop.
-- `docker compose config -q` exits successfully without printing credentials.
-- The database container is running and readiness reports `accepting connections`.
-- On first startup, `no response` can mean initialization is still in progress. Retry the readiness command; if it persists, run `docker compose logs --tail=50 db`.
+On a **new database only**, create the table:
 
-Readiness is not a password test. Check the actual database/user with SQL:
-
-```bash
-docker compose exec db psql -U wehan -d wehan -v ON_ERROR_STOP=1 -c "SELECT current_user, current_database();"
-```
-
-Container-local psql can authenticate differently from Go's TCP connection. The Go startup check in stage 6 verifies the configured connection URL.
-
-## 5. Create the schema once
-
-Only on a **new database**:
-
-```bash
+```sh
 docker compose exec -T db psql -U wehan -d wehan -v ON_ERROR_STOP=1 < backend/schema.sql
 ```
 
-Expected: `CREATE TABLE`. Inspect it:
+Do not rerun this schema on later starts.
 
-```bash
-docker compose exec db psql -U wehan -d wehan -c "\d tasks"
-```
+## 4. Start Go — terminal A
 
-The table has generated bigint `id`, required `title` up to 200 characters, and boolean `completed` defaulting to false. The check rejects empty or ordinary-space-only titles. The API additionally trims surrounding whitespace.
-
-If `relation tasks already exists` appears, do not rerun or drop the table. Inspect it and proceed when the expected schema is present. The schema file is not a repeatable migration script.
-
-## 6. Terminal A: start Go
-
-From the repository root:
-
-```bash
+```sh
 go -C backend mod download
 set -a
 source .env
@@ -128,9 +75,9 @@ set +a
 go -C backend run ./cmd/api
 ```
 
-Expected startup messages include `Database connection established` and `API server listening on :8080`. Keep this terminal running. The listening message announces the attempt: a subsequent bind error still means startup failed. Go does not automatically load `.env` or reload saved source changes.
+Keep the terminal open. The API should connect to the database and listen on port 8080 without an error.
 
-If the URL password is outdated, edit and save `.env`, then reload it. Alternatively, use this **zsh-only** password prompt from the root, assuming the user/database names above and a URL-safe password:
+To enter the existing database password interactively instead of loading `.env`, use this zsh alternative:
 
 ```zsh
 read -s "DB_PASSWORD?Database password: "
@@ -140,135 +87,108 @@ unset DB_PASSWORD
 go -C backend run ./cmd/api
 ```
 
-Enter the existing database password and press Enter; typing is hidden. This sets the URL in the current terminal only. It does not save `.env` or change the database password. Do not source an outdated `.env` afterward. New terminals need their own environment loading.
+Typing is hidden. This assumes the same user/database names and a URL-safe password. It sets the connection URL only in this terminal; do not load an outdated `.env` afterward.
 
-## 7. Terminal B: start Nuxt
+## 5. Start Nuxt — terminal B
 
-Open a **second VS Code terminal**, navigate to the same checkout, then:
+Open another terminal in the same repository:
 
-```bash
+```sh
 cd frontend
 npm ci
 npm run dev
 ```
 
-`npm ci` uses the committed lockfile. Run it on first setup and after dependency-lock changes; do not initialize another Nuxt app in this clone.
+Open [localhost:3000](http://localhost:3000/), or the address Nuxt prints. Keep both service terminals open. `npm run build` builds the application; it does not start the development server.
 
-Keep this terminal running. Open the URL printed by Nuxt, normally `http://localhost:3000/`. If a different port is printed, use it consistently in subsequent checks. Nuxt's configuration forwards `/api/**` to the Go service on port 8080. Do not run only `npm run build` and expect a running development server: build verifies/produces output, dev starts the server.
+## 6. Test
 
-## 8. Terminal C: verify the running system
+In another terminal:
 
-Open a third terminal in the repository root. These read-only requests should return `200`:
-
-```bash
+```sh
 curl -i http://localhost:8080/healthz
 curl -i http://localhost:8080/api/tasks
 curl -i http://localhost:3000/api/tasks
 ```
 
-On a fresh database, both task endpoints should return `[]`. Existing checkouts may have rows. The two task responses should agree. The Nuxt response can include additional connection/transfer headers; those are not task fields.
+All should return 200. The task endpoints should return the same list, initially `[]` on an empty database.
 
-### Browser acceptance
+Use a disposable task in the browser:
 
-Use only a task created specifically for this test. Deletion removes its database row permanently.
+| Action | Expected |
+| --- | --- |
+| Add a task | Appears in the list; input clears |
+| Check, reload; uncheck, reload | Both completion states persist |
+| Edit, change title, cancel | Original title remains |
+| Edit, change title, save, reload | New title persists |
+| Submit a space-only title | Error; no invalid change |
+| Delete, reload | Task stays absent |
 
-| Test | Action | Expected |
-| --- | --- | --- |
-| Create | Enter `Local smoke test` and select Add task. | Task appears automatically; input clears. |
-| Persistence | Reload the browser. | Same task remains. |
-| Completion | Check the task, reload; uncheck, reload. | Completed and incomplete states both persist. |
-| Cancel edit | Select Edit, change the draft, select Cancel. | Saved title stays unchanged. |
-| Save edit | Select Edit, enter `Edited smoke test`, submit. | New title appears; remains after reload. The submit button may read Save or Submit. |
-| Invalid title | Try an ordinary-space-only new title or edit. | Error message; no invalid database change. |
-| Delete | Delete this disposable task, then reload. | Task stays absent. |
+### Inspect the database
 
-### API mutation check (alternative to browser actions)
-
-Each POST creates a row. Copy its generated ID; replace `123` below with that actual ID. Do not paste the placeholders literally or operate on an existing personal task.
-
-```bash
-curl -i -X POST http://localhost:3000/api/tasks -H 'Content-Type: application/json' -d '{"title":"API smoke test"}'
-curl -i -X PATCH http://localhost:3000/api/tasks/123 -H 'Content-Type: application/json' -d '{"completed":true}'
-curl -i -X PATCH http://localhost:3000/api/tasks/123 -H 'Content-Type: application/json' -d '{"title":"Edited API smoke test"}'
-curl -i -X DELETE http://localhost:3000/api/tasks/123
-curl -i -X DELETE http://localhost:3000/api/tasks/123
-```
-
-Expected statuses in order: 201, 200, 200, 204, 404. A 204 response has no body.
-
-```bash
-curl -i -X POST http://localhost:3000/api/tasks -H 'Content-Type: application/json' -d '{"title":"   "}'
-curl -i -X POST http://localhost:3000/api/tasks -H 'Content-Type: application/json' -d '{"title":"Task","extra":true}'
-curl -i -X POST http://localhost:3000/api/tasks -H 'Content-Type: application/json' -d '{"title":"Task"} {"title":"Other"}'
-```
-
-Each should return 400 without creating a task.
-
-### Inspect stored records
-
-```bash
+```sh
 docker compose exec db psql -U wehan -d wehan -c "SELECT id, title, completed FROM tasks ORDER BY id;"
 ```
 
-In psql, `t` means true, `f` means false. IDs can have gaps after rejected inserts or deleted rows. For interactive inspection:
+For interactive inspection:
 
-```bash
+```sh
 docker compose exec db psql -U wehan -d wehan
 ```
 
-Use `\dt` to list tables, `\d tasks` for schema, SQL SELECT to read records, and `\q` to exit. Files are stored in Docker's named volume, not the source folder. Docker Desktop shows the container and volume under Containers and Volumes; names commonly include `to-do-db-1` and `to-do_pgdata`, depending on the Compose project name. Never edit raw database volume files.
+`tasks` is the database table that stores each task's ID, title and completion status.
 
-## 9. Build and static checks
+- `\dt`: list the database tables.
+- `\d tasks`: show the task table's columns and rules, not its saved records.
+- `SELECT id, title, completed FROM tasks ORDER BY id;`: show the saved tasks.
+- `\q`: exit the database terminal.
 
-From the repository root, with no need to stop running services:
+Completion values display as `t` (true) and `f` (false). Database files live in Docker's `pgdata` volume.
 
-```bash
+### Automated checks
+
+From the repository root:
+
+```sh
+# List Go files that need formatting.
 gofmt -l backend/cmd/api
+
+# Run the tests defined in Go test files.
 go -C backend test ./...
+
+# Check Go code for common mistakes without running the server.
 go -C backend vet ./...
+
+# Build the frontend; this does not start the development server.
 npm --prefix frontend run build
 ```
 
-Expected: no filenames from gofmt, successful Go commands and a successful Nuxt build. There are currently no automated Go test files; `go test` compiles packages rather than establishing HTTP behavior. Building Nuxt is not the same as a dedicated TypeScript typecheck. Browser/API checks above are separate acceptance evidence.
 
-## 10. Later starts and stopping
+## Restart and stop
 
-After a reboot, open Docker Desktop and wait for its engine. In the repository root:
+After a reboot, start Docker Desktop and the database, then repeat the Go and Nuxt startup steps. Run `npm ci` again when dependencies change. Keep your existing `.env` and database schema.
 
-```bash
-docker compose up -d db
-docker compose exec db pg_isready -U wehan -d wehan
-```
+Stop Go and Nuxt with Control+C. Stop PostgreSQL without deleting data:
 
-After readiness, repeat stage 6 in Terminal A and `cd frontend` / `npm run dev` in Terminal B. Do **not** copy the environment template over your working `.env`, recreate the schema, or initialize another frontend.
-
-Stop Go and Nuxt with Control+C in their respective terminals. From the repository root, stop the database while preserving data:
-
-```bash
+```sh
 docker compose stop db
 ```
 
-`docker compose down` removes containers/network but retains the named volume. **Adding `-v` deletes the database data.** It is not part of this guide's normal workflow.
+`docker compose down` preserves the named volume; adding `-v` deletes database data.
 
 ## Troubleshooting
 
-| Symptom | Check / action |
+| Problem | Action |
 | --- | --- |
-| command not found | Install the corresponding tool, reopen the terminal, rerun the version check. |
-| Cannot connect to Docker daemon | Open Docker Desktop; wait for engine readiness, then retry docker info. |
-| connection refused on 5432 | Start db; inspect compose ps and logs. Confirm port mapping and readiness. |
-| DATABASE_URL is required | Load/export `.env` in the same terminal where Go starts. |
-| password authentication failed | Confirm the URL is not a placeholder and matches the existing database password. Changing initialization variables does not update existing volumes. |
-| role/database does not exist | Use the actual initialized user/database names. Do not assume readiness proves authentication. |
-| port 8080 already in use | Stop the old Go service in its terminal before starting another. Do not kill unknown processes blindly. |
-| Nuxt chooses another port | Close the earlier dev server or use the printed port for the page and curl checks. |
-| tasks already exists | Schema was applied earlier; inspect it rather than recreating it. |
-| relation tasks does not exist | Apply schema once to the database referenced by DATABASE_URL. |
-| cannot find main module | Run Go with `-C backend` from the repository root, or enter backend first. |
-| zsh tries to run HTTP/1.1 or Date | You pasted output as commands. Copy command blocks only. |
-| Page shows load failure | Check Go terminal, db readiness and direct 8080 request before testing the proxy. |
-| Changes not reflected in Go | Save source, stop the old process and restart Go. |
+| Command not found | Install the tool and reopen the terminal |
+| Docker daemon unavailable | Open Docker Desktop and wait for its engine |
+| Connection refused on 5432 | Start the database; check `docker compose ps` and `docker compose logs --tail=50 db` |
+| Password authentication failed | Use the existing database password; changing `.env` does not reset a volume's credentials |
+| DATABASE_URL is required | Load `.env` in the terminal starting Go |
+| Tasks table already exists | Skip schema creation |
+| Tasks table does not exist | Apply the schema to the database used by Go |
+| Port already in use | Stop the earlier service or use Nuxt's printed address |
+| Page cannot load tasks | Check Go's terminal and the direct API request before the proxy |
+| Go changes are not visible | Save, stop and restart Go |
 
-## Evidence boundary
-
-This guide was checked against source, configuration, tracked dependencies, local build results and browser/API acceptance on the existing development Mac. It is not a claim of installation testing on a brand-new Mac, Windows machine or Linux VM. An isolated tracked-file copy was also tested without copying `.env`, node_modules or build output: fresh `npm ci`, Nuxt build, Go compilation and static checks passed on 2026-10-27. This still uses the existing host toolchain and is not a fresh-OS or empty-database end-to-end test. A genuinely clean-machine run is a separate verification step.
+Setup was verified on macOS using an isolated source copy, a fresh dependency installation and a new database. Checks covered service startup, the rendered page, API forwarding, task operations and the production build.

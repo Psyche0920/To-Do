@@ -1,4 +1,3 @@
-// Files in this directory share one package; no file-to-file import is needed.
 package main
 
 import (
@@ -18,16 +17,14 @@ import (
 	_ "github.com/jackc/pgx/v5/stdlib"
 )
 
-// Task holds task data; JSON tags choose output keys, not values.
+// Task is a saved task returned by the API.
 type Task struct {
-	Id        int64  `json:"id"`
+	ID        int64  `json:"id"`
 	Title     string `json:"title"`
 	Completed bool   `json:"completed"`
 }
 
-// application groups shared dependencies; it is not the PostgreSQL database.
 type application struct {
-	// sql.DB is the connection-pool type; *sql.DB is a pointer to that pool.
 	db *sql.DB
 }
 
@@ -37,23 +34,20 @@ func main() {
 	if dsn == "" {
 		log.Fatal("DATABASE_URL is required")
 	}
-	// Receive two values: a pool pointer and an error, not the database server itself.
 	db, err := openDatabase(dsn)
 	if err != nil {
 		log.Fatal(err)
 	}
-	// Schedule pool cleanup on normal return; log.Fatal exits without running defers.
+	// Deferred cleanup runs on normal return; log.Fatal exits immediately.
 	defer db.Close()
 	log.Println("Database connection established")
 
-	// & takes the struct address; the left db is its field, the right db is the local pool.
 	app := &application{db: db}
 
 	// One mux can map many HTTP method/path pairs to handler functions.
 	mux := http.NewServeMux()
 	mux.HandleFunc("GET /healthz", healthHandler)
 	mux.HandleFunc("GET /wehan", wehanHandler)
-	// Binding the method carries app (and app.db) while keeping the HTTP handler signature.
 	mux.HandleFunc("GET /api/tasks", app.listTasksHandler)
 	mux.HandleFunc("POST /api/tasks", app.createTaskHandler)
 	mux.HandleFunc("PATCH /api/tasks/{id}", app.updateTaskHandler)
@@ -64,7 +58,6 @@ func main() {
 		port = "8080"
 	}
 
-	// & creates a pointer to this server struct; configuring it does not start listening.
 	server := &http.Server{
 		Addr:    ":" + port,
 		Handler: mux,
@@ -73,22 +66,16 @@ func main() {
 	}
 
 	log.Printf("API server listening on :%s", port)
-	// ListenAndServe starts listening; the preceding log line only announces the attempt.
 	log.Fatal(server.ListenAndServe())
 }
 
-// w writes the response to the client; r is a pointer to the incoming request.
 func healthHandler(w http.ResponseWriter, r *http.Request) {
-	// Header sets metadata; declaring JSON does not itself encode the body.
 	w.Header().Set("Content-Type", "application/json")
-	// WriteHeader sends the status code (200); set header fields before this call.
 	w.WriteHeader(http.StatusOK)
 
-	// map[string]string is a string-key/string-value map; Encode writes JSON plus a newline.
 	if err := json.NewEncoder(w).Encode(map[string]string{
 		"status": "ok",
 	}); err != nil {
-		// %v formats the error value; logging writes to the server terminal, not the client.
 		log.Printf("write health response: %v", err)
 	}
 }
@@ -96,16 +83,16 @@ func healthHandler(w http.ResponseWriter, r *http.Request) {
 func wehanHandler(w http.ResponseWriter, r *http.Request) {
 	// A custom header is separate from the Content-Type header.
 	w.Header().Set("wehan", "to do")
+	w.Header().Set("Content-Type", "application/json")
 	w.WriteHeader(http.StatusOK)
 
 	if err := json.NewEncoder(w).Encode(map[string]string{
 		"status": "ok",
 	}); err != nil {
-		log.Printf("write health response: %v", err)
+		log.Printf("write wehan response: %v", err)
 	}
 }
 
-// The receiver is like Python self: app points to the struct; app.db points to the pool.
 func (app *application) listTasksHandler(w http.ResponseWriter, r *http.Request) {
 	// Limit the query to five seconds; inherit request cancellation.
 	ctx, cancel := context.WithTimeout(r.Context(), 5*time.Second)
@@ -129,8 +116,8 @@ func (app *application) listTasksHandler(w http.ResponseWriter, r *http.Request)
 	for rows.Next() {
 		var task Task
 		// Read columns into fields in the same order as SELECT.
-		if err := rows.Scan(&task.Id, &task.Title, &task.Completed); err != nil {
-			log.Printf("scan task : %v", err)
+		if err := rows.Scan(&task.ID, &task.Title, &task.Completed); err != nil {
+			log.Printf("scan task: %v", err)
 			http.Error(w, "Unable to retrieve tasks", http.StatusInternalServerError)
 			return
 		}
@@ -180,6 +167,10 @@ func (app *application) createTaskHandler(w http.ResponseWriter, r *http.Request
 	}
 
 	title := strings.TrimSpace(input.Title)
+	if strings.ContainsRune(title, '\x00') {
+		http.Error(w, "Title cannot contain a null character", http.StatusBadRequest)
+		return
+	}
 	titleLength := len([]rune(title))
 
 	if titleLength == 0 || titleLength > 200 {
@@ -202,7 +193,7 @@ func (app *application) createTaskHandler(w http.ResponseWriter, r *http.Request
 		title,
 	)
 
-	scanErr := row.Scan(&task.Id, &task.Title, &task.Completed)
+	scanErr := row.Scan(&task.ID, &task.Title, &task.Completed)
 	if scanErr != nil {
 		log.Printf("create task: %v", scanErr)
 		http.Error(w, "Unable to create task", http.StatusInternalServerError)
@@ -259,6 +250,10 @@ func (app *application) updateTaskHandler(w http.ResponseWriter, r *http.Request
 
 	if input.Title != nil {
 		cleanTitle := strings.TrimSpace(*input.Title)
+		if strings.ContainsRune(cleanTitle, '\x00') {
+			http.Error(w, "Title cannot contain a null character", http.StatusBadRequest)
+			return
+		}
 		titleLength := len([]rune(cleanTitle))
 		if titleLength == 0 || titleLength > 200 {
 			http.Error(w, "Title must contain 1 to 200 characters", http.StatusBadRequest)
@@ -278,13 +273,16 @@ func (app *application) updateTaskHandler(w http.ResponseWriter, r *http.Request
 	// Update and return the task.
 	row := app.db.QueryRowContext(
 		ctx,
-		"UPDATE tasks SET title = COALESCE($1, title), completed = COALESCE($2, completed) WHERE id = $3 RETURNING id, title, completed",
+		`UPDATE tasks
+		 SET title = COALESCE($1, title), completed = COALESCE($2, completed)
+		 WHERE id = $3
+		 RETURNING id, title, completed`,
 		input.Title,
 		input.Completed,
 		id,
 	)
 
-	scanErr := row.Scan(&task.Id, &task.Title, &task.Completed)
+	scanErr := row.Scan(&task.ID, &task.Title, &task.Completed)
 	taskNotFound := errors.Is(scanErr, sql.ErrNoRows)
 	if taskNotFound {
 		http.Error(w, "Task not found", http.StatusNotFound)
