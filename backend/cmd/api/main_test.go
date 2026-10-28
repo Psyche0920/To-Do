@@ -80,6 +80,11 @@ func TestInvalidTaskRequests(t *testing.T) {
 			body:   `{"completed":"yes"}`,
 		},
 		{
+			name:   "non-positive task ID",
+			method: http.MethodDelete,
+			path:   "/api/tasks/0",
+		},
+		{
 			name:   "invalid task ID",
 			method: http.MethodDelete,
 			path:   "/api/tasks/invalid",
